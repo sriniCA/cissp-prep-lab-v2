@@ -474,7 +474,7 @@
   }
 
   function showView(name) {
-    ["view-home", "view-mock-setup", "view-study-setup", "view-help", "view-run", "view-results", "view-concepts", "view-resources"].forEach(
+    ["view-home", "view-mock-setup", "view-study-setup", "view-help", "view-run", "view-results", "view-concepts", "view-resources", "view-jobs", "view-resume"].forEach(
       (id) => {
         const el = $(id);
         if (el) el.classList.toggle("hidden", id !== name);
@@ -1317,6 +1317,16 @@
     $("btn-help").addEventListener("click", () => showView("view-help"));
     $("help-close").addEventListener("click", () => showView("view-home"));
 
+    $("btn-jobs").addEventListener("click", () => {
+      showView("view-jobs");
+      renderJobsView();
+    });
+
+    $("btn-resume").addEventListener("click", () => {
+      showView("view-resume");
+      renderResumeView();
+    });
+
     $("btn-concepts").addEventListener("click", () => {
       showView("view-concepts");
       showConceptsDomainList();
@@ -1905,6 +1915,413 @@
     $("btn-mark-hard").classList.remove("hidden");
     showView("view-run");
     renderQuestion();
+  }
+
+  // ── Jobs view ────────────────────────────────────────────────────
+
+  const JOB_PORTALS = [
+    { id: "linkedin",     name: "LinkedIn",       icon: "in",  color: "#0077b5", desc: "Largest professional network — biggest CISSP job pool",
+      url: (t, loc, type) => `https://www.linkedin.com/jobs/search/?keywords=${enc(t)}&location=${enc(loc)}${type === "remote" ? "&f_WT=2" : type === "fulltime" ? "&f_WT=1" : ""}` },
+    { id: "dice",         name: "Dice",            icon: "D",   color: "#e3571e", desc: "Tech & cybersecurity specialist board",
+      url: (t, loc)       => `https://www.dice.com/jobs?q=${enc(t)}&location=${enc(loc)}` },
+    { id: "indeed",       name: "Indeed",          icon: "in",  color: "#2164f3", desc: "Largest general job board worldwide",
+      url: (t, loc, type) => `https://www.indeed.com/jobs?q=${enc(t)}&l=${enc(loc)}${type === "remote" ? "&remotejob=032b3046-06a3-4876-8dfd-474eb5e7ed11" : ""}` },
+    { id: "usajobs",      name: "USAJobs",         icon: "USA", color: "#004c97", desc: "U.S. federal government security positions",
+      url: (t, loc)       => `https://www.usajobs.gov/Search/Results?k=${enc(t)}&l=${enc(loc)}` },
+    { id: "clearance",    name: "ClearanceJobs",   icon: "CJ",  color: "#0055a5", desc: "Security clearance & cleared CISSP roles",
+      url: (t, loc)       => `https://www.clearancejobs.com/jobs?q=${enc(t)}&location=${enc(loc)}` },
+    { id: "glassdoor",    name: "Glassdoor",       icon: "G",   color: "#0caa41", desc: "Jobs with salary & company reviews",
+      url: (t, loc)       => `https://www.glassdoor.com/Job/${enc(t.replace(/ /g, "-"))}-jobs-SRCH_KO0,${t.length}.htm?locT=C&locId=1&locKeyword=${enc(loc)}` },
+    { id: "monster",      name: "Monster",         icon: "M",   color: "#6e45e1", desc: "Broad reach across industries",
+      url: (t, loc)       => `https://www.monster.com/jobs/search?q=${enc(t)}&where=${enc(loc)}` },
+    { id: "ziprecruiter", name: "ZipRecruiter",    icon: "Z",   color: "#4a90d9", desc: "AI-matched CISSP opportunities",
+      url: (t, loc)       => `https://www.ziprecruiter.com/candidate/search?search=${enc(t)}&location=${enc(loc)}` },
+    { id: "cyberseek",    name: "CyberSeek",       icon: "CS",  color: "#00b4d8", desc: "Cybersecurity career pathway & heat map",
+      url: ()             => `https://www.cyberseek.org/heatmap.html` },
+    { id: "infosecjobs",  name: "InfoSec Jobs",    icon: "IS",  color: "#c0392b", desc: "Dedicated information security job board",
+      url: (t, loc)       => `https://www.infosec-jobs.com/?q=${enc(t)}&location=${enc(loc)}` },
+    { id: "simplyhired",  name: "SimplyHired",     icon: "SH",  color: "#5c35c2", desc: "Aggregates listings from many sources",
+      url: (t, loc)       => `https://www.simplyhired.com/search?q=${enc(t)}&l=${enc(loc)}` },
+    { id: "wellfound",    name: "Wellfound",       icon: "WF",  color: "#1c2b33", desc: "Startup & tech security roles",
+      url: (t)            => `https://wellfound.com/jobs?q=${enc(t)}` },
+  ];
+
+  const QUICK_SEARCHES = [
+    "CISSP Security Architect", "SOC Analyst CISSP", "GRC Compliance Analyst CISSP",
+    "Cloud Security Engineer CISSP", "Penetration Tester CISSP", "CISSP Security Manager",
+    "DevSecOps Engineer CISSP", "CISO Chief Information Security Officer", "IAM Engineer CISSP",
+    "Incident Response CISSP",
+  ];
+
+  function enc(s) { return encodeURIComponent(s || ""); }
+
+  const LS_SAVED_JOBS = "cissp_saved_jobs_v1";
+  function loadSavedJobs() {
+    try { const r = localStorage.getItem(LS_SAVED_JOBS); return r ? JSON.parse(r) : []; } catch { return []; }
+  }
+  function persistSavedJobs(list) { localStorage.setItem(LS_SAVED_JOBS, JSON.stringify(list)); }
+
+  const JOB_STATUS_META = {
+    bookmarked: { label: "Bookmarked", cls: "jstatus-book" },
+    applied:    { label: "Applied",    cls: "jstatus-applied" },
+    screening:  { label: "Screening",  cls: "jstatus-screen" },
+    interview:  { label: "Interview",  cls: "jstatus-interview" },
+    offer:      { label: "Offer 🎉",   cls: "jstatus-offer" },
+    rejected:   { label: "Rejected",   cls: "jstatus-rejected" },
+  };
+
+  function renderJobsView() {
+    // Back button
+    const back = $("jobs-back");
+    if (back && !back.dataset.wired) {
+      back.dataset.wired = "1";
+      back.addEventListener("click", () => showView("view-home"));
+    }
+
+    // Portal grid
+    const grid = $("jobs-portal-grid");
+    grid.innerHTML = "";
+    JOB_PORTALS.forEach(p => {
+      const card = document.createElement("div");
+      card.className = "jobs-portal-card";
+      card.innerHTML =
+        `<div class="jpc-icon" style="background:${p.color}">${p.icon}</div>` +
+        `<div class="jpc-info"><div class="jpc-name">${p.name}</div><div class="jpc-desc">${p.desc}</div></div>` +
+        `<button type="button" class="jpc-btn">Search &rarr;</button>`;
+      card.querySelector(".jpc-btn").addEventListener("click", () => {
+        const title = $("job-role").value || "CISSP";
+        const loc   = $("job-location").value.trim();
+        const type  = $("job-type").value;
+        window.open(p.url(title, loc, type), "_blank", "noopener");
+      });
+      grid.appendChild(card);
+    });
+
+    // Quick searches row
+    const qrow = $("jobs-quick-row");
+    qrow.innerHTML = "";
+    QUICK_SEARCHES.forEach(qs => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "jobs-quick-btn";
+      btn.textContent = qs;
+      btn.addEventListener("click", () => {
+        const loc  = $("job-location").value.trim();
+        const type = $("job-type").value;
+        // Open the first 3 portals simultaneously
+        [JOB_PORTALS[0], JOB_PORTALS[1], JOB_PORTALS[2]].forEach(p =>
+          window.open(p.url(qs, loc, type), "_blank", "noopener")
+        );
+      });
+      qrow.appendChild(btn);
+    });
+
+    // Job tracker
+    const addBtn = $("btn-add-saved-job");
+    const form = $("add-job-form");
+    if (addBtn && !addBtn.dataset.wired) {
+      addBtn.dataset.wired = "1";
+      addBtn.addEventListener("click", () => form.classList.toggle("hidden"));
+      $("aj-cancel").addEventListener("click", () => form.classList.add("hidden"));
+      $("aj-save").addEventListener("click", () => {
+        const title = $("aj-title").value.trim();
+        if (!title) { alert("Please enter a job title."); return; }
+        const list = loadSavedJobs();
+        list.unshift({
+          id: Date.now().toString(),
+          title,
+          company: $("aj-company").value.trim(),
+          source:  $("aj-source").value.trim(),
+          status:  $("aj-status").value,
+          url:     $("aj-url").value.trim(),
+          notes:   $("aj-notes").value.trim(),
+          added:   new Date().toLocaleDateString(),
+        });
+        persistSavedJobs(list);
+        ["aj-title","aj-company","aj-source","aj-url","aj-notes"].forEach(id => { $(id).value = ""; });
+        form.classList.add("hidden");
+        renderSavedJobsList();
+      });
+    }
+    renderSavedJobsList();
+  }
+
+  function renderSavedJobsList() {
+    const host = $("saved-jobs-list");
+    if (!host) return;
+    const list = loadSavedJobs();
+    if (list.length === 0) {
+      host.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;padding:0.75rem 0">No jobs tracked yet. Click "+ Track a job" to start.</p>`;
+      return;
+    }
+    host.innerHTML = "";
+    list.forEach(job => {
+      const sm = JOB_STATUS_META[job.status] || JOB_STATUS_META.bookmarked;
+      const row = document.createElement("div");
+      row.className = "saved-job-row";
+      row.innerHTML =
+        `<div class="sjr-main">` +
+          `<span class="sjr-title">${job.title}</span>` +
+          (job.company ? `<span class="sjr-company">${job.company}</span>` : "") +
+          (job.source  ? `<span class="sjr-source">${job.source}</span>` : "") +
+          `<span class="sjr-status ${sm.cls}">${sm.label}</span>` +
+          `<span class="sjr-date">${job.added || ""}</span>` +
+        `</div>` +
+        (job.notes ? `<div class="sjr-notes">${job.notes}</div>` : "") +
+        `<div class="sjr-actions">` +
+          (job.url ? `<a href="${job.url}" target="_blank" rel="noopener" class="sjr-link">Open posting ↗</a>` : "") +
+          `<select class="sjr-status-sel" data-id="${job.id}">` +
+            Object.entries(JOB_STATUS_META).map(([v, m]) =>
+              `<option value="${v}"${job.status === v ? " selected" : ""}>${m.label}</option>`
+            ).join("") +
+          `</select>` +
+          `<button type="button" class="sjr-del" data-id="${job.id}">Delete</button>` +
+        `</div>`;
+      // Status change
+      row.querySelector(".sjr-status-sel").addEventListener("change", e => {
+        const jobs = loadSavedJobs();
+        const j = jobs.find(x => x.id === e.target.dataset.id);
+        if (j) { j.status = e.target.value; persistSavedJobs(jobs); renderSavedJobsList(); }
+      });
+      // Delete
+      row.querySelector(".sjr-del").addEventListener("click", e => {
+        if (!confirm("Remove this job from your tracker?")) return;
+        persistSavedJobs(loadSavedJobs().filter(x => x.id !== e.target.dataset.id));
+        renderSavedJobsList();
+      });
+      host.appendChild(row);
+    });
+  }
+
+  // ── Resume view ───────────────────────────────────────────────────
+
+  const CISSP_KEYWORDS = [
+    // D1 — Security & Risk Management
+    "Risk Management","Risk Assessment","Risk Mitigation","Risk Register","NIST",
+    "ISO 27001","ISO 27002","SOC 2","HIPAA","PCI DSS","GDPR","FedRAMP","FISMA",
+    "COBIT","Security Policy","Security Governance","GRC","Compliance","BCP",
+    "Disaster Recovery","Business Continuity","DRP","Third Party Risk","Vendor Risk",
+    // D2 — Asset Security
+    "Data Classification","Data Governance","Information Lifecycle","Data Retention",
+    "DLP","Data Loss Prevention","Asset Management","Data Handling",
+    // D3 — Security Architecture & Engineering
+    "Security Architecture","Zero Trust","Defense in Depth","Security by Design",
+    "Threat Modeling","SABSA","Cloud Architecture","Cryptography","PKI",
+    "Certificate Management","Encryption","AES","RSA","TLS","SSL","HSM",
+    // D4 — Communication & Network Security
+    "Network Security","Firewall","IDS","IPS","VPN","DMZ","WAF","SASE","SD-WAN",
+    "Network Segmentation","Microsegmentation","Zero Trust Network","TCP/IP","DNS Security",
+    // D5 — Identity & Access Management
+    "Identity and Access Management","IAM","Privileged Access Management","PAM",
+    "MFA","Multi-Factor Authentication","SSO","Single Sign-On","RBAC","ABAC",
+    "OAuth","SAML","Active Directory","LDAP","CyberArk","Okta","Azure AD",
+    // D6 — Security Assessment & Testing
+    "Penetration Testing","Vulnerability Assessment","Vulnerability Management",
+    "DAST","SAST","Security Testing","Red Team","Blue Team","Purple Team",
+    "MITRE ATT&CK","Kill Chain","Threat Hunting","Attack Surface",
+    "Bug Bounty","Nessus","Qualys","Rapid7",
+    // D7 — Security Operations
+    "Security Operations","SOC","SIEM","Splunk","QRadar","ArcSight",
+    "Incident Response","Digital Forensics","DFIR","Malware Analysis",
+    "Threat Intelligence","Security Monitoring","Log Analysis","EDR","XDR",
+    "SOAR","Palo Alto","CrowdStrike",
+    // D8 — Software Development Security
+    "SDLC","Secure SDLC","DevSecOps","Secure Coding","Code Review",
+    "OWASP","Application Security","API Security","CI/CD","GitHub Actions",
+    "Container Security","Kubernetes","Docker Security",
+    // Certifications
+    "CISSP","CISM","CEH","CCSP","CISA","Security+","OSCP","AWS Security",
+    "Azure Security","GCP Security","CCNA Security",
+    // Leadership / cross-cutting
+    "Security Awareness","Security Program","Security Strategy",
+    "Supply Chain Security","Zero Trust Architecture","Cloud Security Posture",
+    "CASB","CSPM","Security Engineering",
+  ];
+
+  const LS_RESUME_DRAFT = "cissp_resume_draft_v1";
+
+  function saveResumeDraft() {
+    const html = $("resume-editor") ? $("resume-editor").innerHTML : "";
+    localStorage.setItem(LS_RESUME_DRAFT, html);
+  }
+
+  function loadResumeDraft() {
+    return localStorage.getItem(LS_RESUME_DRAFT) || "";
+  }
+
+  function updateWordCount() {
+    const wc = $("resume-word-count");
+    const editor = $("resume-editor");
+    if (!wc || !editor) return;
+    const words = (editor.innerText || "").trim().split(/\s+/).filter(Boolean).length;
+    wc.textContent = `${words} word${words !== 1 ? "s" : ""}`;
+  }
+
+  function downloadResumeTxt() {
+    const editor = $("resume-editor");
+    if (!editor) return;
+    const text = editor.innerText || "";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = "cissp_resume.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function printResumeAsPDF() {
+    const editor = $("resume-editor");
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const w = window.open("", "_blank");
+    if (!w) { alert("Please allow pop-ups to save as PDF."); return; }
+    w.document.write(
+      `<!DOCTYPE html><html><head><title>CISSP Resume</title><style>` +
+      `*{box-sizing:border-box}` +
+      `body{font-family:'Georgia',serif;max-width:780px;margin:40px auto;color:#111;font-size:11pt;line-height:1.55;padding:0 24px}` +
+      `h1{font-size:20pt;margin:0 0 4px}h2{font-size:13pt;border-bottom:1px solid #333;padding-bottom:3px;margin:18px 0 6px}` +
+      `h3{font-size:11pt;margin:10px 0 4px}p{margin:3px 0}ul,ol{margin:4px 0 4px 18px}li{margin:2px 0}` +
+      `@media print{body{margin:0;padding:12px}@page{margin:1.5cm}}` +
+      `</style></head><body>${html}</body></html>`
+    );
+    w.document.close();
+    w.setTimeout(() => w.print(), 400);
+  }
+
+  function analyzeJobMatch() {
+    const desc    = ($("resume-job-desc").value || "").toLowerCase();
+    const resume  = ($("resume-editor").innerText || "").toLowerCase();
+    const results = $("job-analysis-results");
+    const akPanel = $("add-keywords-panel");
+    const akList  = $("akp-list");
+
+    if (!desc.trim()) { alert("Please paste a job description first."); return; }
+    if (!resume.trim()) { alert("Please add your resume text first."); return; }
+
+    const found   = [];
+    const missing = [];
+
+    CISSP_KEYWORDS.forEach(kw => {
+      if (desc.includes(kw.toLowerCase())) {
+        (resume.includes(kw.toLowerCase()) ? found : missing).push(kw);
+      }
+    });
+
+    const total  = found.length + missing.length;
+    const score  = total > 0 ? Math.round((found.length / total) * 100) : 0;
+    const sClass = score >= 75 ? "match-great" : score >= 50 ? "match-good" : "match-poor";
+
+    results.classList.remove("hidden");
+    results.innerHTML =
+      `<div class="match-score-row">` +
+        `<div class="match-score-circle ${sClass}">${score}%</div>` +
+        `<div class="match-score-info">` +
+          `<div class="match-score-label">${score >= 75 ? "Strong Match" : score >= 50 ? "Partial Match" : "Needs Work"}</div>` +
+          `<div class="match-score-sub">${found.length} of ${total} required keywords found in your resume</div>` +
+        `</div>` +
+      `</div>` +
+      (found.length > 0
+        ? `<div class="match-section-head match-found-head">&#x2705; Present in your resume (${found.length})</div>` +
+          `<div class="match-kw-list">${found.map(k => `<span class="mkw mkw-ok">${k}</span>`).join("")}</div>`
+        : "") +
+      (missing.length > 0
+        ? `<div class="match-section-head match-missing-head">&#x26A0; Missing from your resume (${missing.length})</div>` +
+          `<div class="match-kw-list">${missing.map(k => `<span class="mkw mkw-miss">${k}</span>`).join("")}</div>`
+        : "");
+
+    // Suggestions panel
+    if (missing.length > 0) {
+      akPanel.classList.remove("hidden");
+      akList.innerHTML = missing.map(kw =>
+        `<label class="akp-item"><input type="checkbox" class="akp-cb" value="${kw}" checked /> ${kw}</label>`
+      ).join("");
+    } else {
+      akPanel.classList.add("hidden");
+    }
+  }
+
+  function applyKeywordsToResume() {
+    const checked = Array.from(document.querySelectorAll(".akp-cb:checked")).map(cb => cb.value);
+    if (checked.length === 0) { alert("No keywords selected."); return; }
+    const editor = $("resume-editor");
+    // Append a "Key Skills" section if not already ending with one
+    const existing = editor.innerHTML;
+    const addSection =
+      `<h2>Additional CISSP Skills</h2>` +
+      `<p>${checked.join(" &bull; ")}</p>`;
+    editor.innerHTML = existing + "\n" + addSection;
+    updateWordCount();
+    saveResumeDraft();
+    $("add-keywords-panel").classList.add("hidden");
+    editor.scrollTop = editor.scrollHeight;
+  }
+
+  function renderResumeView() {
+    const editor = $("resume-editor");
+    const back   = $("resume-back");
+
+    // Load saved draft once
+    if (editor && !editor.dataset.loaded) {
+      editor.dataset.loaded = "1";
+      const draft = loadResumeDraft();
+      if (draft) editor.innerHTML = draft;
+      editor.addEventListener("input", () => { updateWordCount(); saveResumeDraft(); });
+      updateWordCount();
+    }
+
+    if (back && !back.dataset.wired) {
+      back.dataset.wired = "1";
+      back.addEventListener("click", () => { saveResumeDraft(); showView("view-home"); });
+    }
+
+    // Toolbar buttons
+    document.querySelectorAll(".rtb[data-cmd]").forEach(btn => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", () => {
+        const val = btn.dataset.val || null;
+        document.execCommand(btn.dataset.cmd, false, val);
+        $("resume-editor").focus();
+      });
+    });
+
+    // Upload
+    const uploadInput = $("resume-file-input");
+    const uploadBtn   = $("btn-resume-upload");
+    if (uploadBtn && !uploadBtn.dataset.wired) {
+      uploadBtn.dataset.wired = "1";
+      uploadBtn.addEventListener("click", () => uploadInput.click());
+      uploadInput.addEventListener("change", e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.name.match(/\.(txt|text|md)$/i)) {
+          alert("Please upload a .txt, .text, or .md file.\n\nFor PDF or Word documents: open the file, select all (Ctrl+A), copy, then paste into the editor.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = ev => {
+          editor.innerText = ev.target.result;
+          updateWordCount();
+          saveResumeDraft();
+        };
+        reader.readAsText(file);
+        uploadInput.value = "";
+      });
+    }
+
+    // Action buttons
+    const wireOnce = (id, fn) => {
+      const el = $(id);
+      if (el && !el.dataset.wired) { el.dataset.wired = "1"; el.addEventListener("click", fn); }
+    };
+    wireOnce("btn-resume-save",    () => { saveResumeDraft(); const b = $("btn-resume-save"); b.textContent = "✓ Saved"; setTimeout(() => { b.textContent = "💾 Save Draft"; }, 1500); });
+    wireOnce("btn-resume-dl-txt",  downloadResumeTxt);
+    wireOnce("btn-resume-print",   printResumeAsPDF);
+    wireOnce("btn-analyze-job",    analyzeJobMatch);
+    wireOnce("btn-apply-keywords", applyKeywordsToResume);
   }
 
   // ── CAT (Computerised Adaptive Testing) engine ───────────────────

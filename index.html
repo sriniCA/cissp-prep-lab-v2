@@ -51,6 +51,8 @@
         <button type="button" id="btn-concepts" class="secondary">Key Concepts</button>
         <button type="button" id="btn-materials" class="secondary">📄 Materials</button>
         <button type="button" id="btn-help" class="secondary">Import material</button>
+        <button type="button" id="btn-jobs" class="secondary">&#x1F4BC; Jobs</button>
+        <button type="button" id="btn-resume" class="secondary">&#x1F4CB; Resume</button>
       </div>
       <p class="help-content" style="margin:0">
         Mock mode uses a linear exam shell: fixed item count, four options, single-select, countdown timer (similar length to the English CAT appointment window). Adaptive scoring is not replicated—use it for stamina and coverage.
@@ -255,6 +257,139 @@
       </div>
       <div id="concepts-content"></div>
     </section>
+
+    <!-- ── Jobs ── -->
+    <section id="view-jobs" class="hidden">
+      <div class="jobs-topbar">
+        <button type="button" id="jobs-back" class="secondary">← Back</button>
+        <h2 style="margin:0;font-size:1.15rem;font-weight:700">CISSP Job Search</h2>
+      </div>
+
+      <!-- Filters -->
+      <div class="jobs-filters panel">
+        <div class="jobs-filter-grid">
+          <div class="field">
+            <span class="label-text">Location</span>
+            <input type="text" id="job-location" placeholder="Remote, New York NY, USA…" />
+          </div>
+          <div class="field">
+            <span class="label-text">Job type</span>
+            <select id="job-type">
+              <option value="">All types</option>
+              <option value="remote">Remote</option>
+              <option value="fulltime">Full-time</option>
+              <option value="contract">Contract / Consulting</option>
+            </select>
+          </div>
+          <div class="field">
+            <span class="label-text">Role focus</span>
+            <select id="job-role">
+              <option value="CISSP">CISSP (general)</option>
+              <option value="CISSP Security Architect">Security Architect</option>
+              <option value="CISSP Security Analyst">Security Analyst</option>
+              <option value="CISSP Cloud Security Engineer">Cloud Security Engineer</option>
+              <option value="CISSP GRC Analyst">GRC / Compliance Analyst</option>
+              <option value="CISSP Penetration Tester">Penetration Tester</option>
+              <option value="Information Security Manager CISSP">Security Manager</option>
+              <option value="Chief Information Security Officer CISSP">CISO</option>
+              <option value="CISSP SOC Analyst">SOC Analyst</option>
+              <option value="CISSP DevSecOps Engineer">DevSecOps Engineer</option>
+            </select>
+          </div>
+        </div>
+        <p class="jobs-note">Searches open each portal in a new tab with your filters pre-applied. Live results are served directly by the portal.</p>
+      </div>
+
+      <!-- Portal cards -->
+      <h3 class="jobs-section-head">Job Portals</h3>
+      <div id="jobs-portal-grid" class="jobs-portal-grid"></div>
+
+      <!-- Quick searches -->
+      <h3 class="jobs-section-head">Quick Role Searches</h3>
+      <div id="jobs-quick-row" class="jobs-quick-row"></div>
+
+      <!-- Saved job tracker -->
+      <div class="panel" style="margin-top:1.5rem">
+        <div class="row spread mb">
+          <h3 style="margin:0">&#x1F4CB; My Job Tracker</h3>
+          <button type="button" id="btn-add-saved-job" class="secondary">+ Track a job</button>
+        </div>
+        <div id="add-job-form" class="add-job-form hidden">
+          <div class="jobs-filter-grid">
+            <div class="field"><span class="label-text">Job title</span><input type="text" id="aj-title" placeholder="e.g. Senior Security Architect" /></div>
+            <div class="field"><span class="label-text">Company</span><input type="text" id="aj-company" placeholder="Company name" /></div>
+            <div class="field"><span class="label-text">Portal / source</span><input type="text" id="aj-source" placeholder="e.g. LinkedIn" /></div>
+            <div class="field"><span class="label-text">Status</span>
+              <select id="aj-status">
+                <option value="bookmarked">Bookmarked</option>
+                <option value="applied">Applied</option>
+                <option value="screening">Phone Screen</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+          <div class="field mt"><span class="label-text">Job URL (optional)</span><input type="text" id="aj-url" placeholder="https://…" /></div>
+          <div class="field mt"><span class="label-text">Notes</span><textarea id="aj-notes" rows="2" placeholder="Salary, recruiter name, next steps…"></textarea></div>
+          <div class="row mt"><button type="button" id="aj-save" class="secondary">Save</button><button type="button" id="aj-cancel" class="secondary">Cancel</button></div>
+        </div>
+        <div id="saved-jobs-list"></div>
+      </div>
+    </section>
+
+    <!-- ── Resume ── -->
+    <section id="view-resume" class="hidden">
+      <div class="resume-topbar">
+        <button type="button" id="resume-back" class="secondary">← Back</button>
+        <h2 style="margin:0;font-size:1.15rem;font-weight:700">Resume Builder</h2>
+        <div class="resume-top-actions">
+          <input type="file" id="resume-file-input" accept=".txt,.text,.md" class="hidden" />
+          <button type="button" id="btn-resume-upload" class="secondary">&#x1F4E4; Upload .txt</button>
+          <button type="button" id="btn-resume-save" class="secondary">&#x1F4BE; Save Draft</button>
+          <button type="button" id="btn-resume-dl-txt">&#x2B07; Download TXT</button>
+          <button type="button" id="btn-resume-print" class="secondary">&#x1F5A8; Save as PDF</button>
+        </div>
+      </div>
+
+      <div class="resume-layout">
+        <!-- Left: editor -->
+        <div class="resume-editor-col">
+          <div class="resume-toolbar">
+            <button type="button" class="rtb" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button type="button" class="rtb" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button type="button" class="rtb" data-cmd="underline" title="Underline"><u>U</u></button>
+            <span class="rtb-sep"></span>
+            <button type="button" class="rtb" data-cmd="insertUnorderedList" title="Bullet list">&#x2022;&#x2014;</button>
+            <button type="button" class="rtb" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+            <span class="rtb-sep"></span>
+            <button type="button" class="rtb" data-cmd="formatBlock" data-val="h2" title="Heading">H</button>
+            <button type="button" class="rtb" data-cmd="formatBlock" data-val="p" title="Paragraph">P</button>
+            <span class="rtb-sep"></span>
+            <button type="button" class="rtb" data-cmd="undo" title="Undo">&#x21B6;</button>
+            <button type="button" class="rtb" data-cmd="redo" title="Redo">&#x21B7;</button>
+          </div>
+          <div id="resume-editor" class="resume-editor" contenteditable="true" spellcheck="true"
+               data-placeholder="Paste or type your resume here, or upload a .txt file above…"></div>
+          <div class="resume-char-count"><span id="resume-word-count">0 words</span></div>
+        </div>
+
+        <!-- Right: analysis -->
+        <div class="resume-analysis-col">
+          <h3 class="resume-analysis-head">&#x1F50D; Job Match Analysis</h3>
+          <textarea id="resume-job-desc" class="resume-job-desc-input"
+            placeholder="Paste a job description here and click Analyze to see how well your resume matches the required CISSP skills…" rows="8"></textarea>
+          <button type="button" id="btn-analyze-job">Analyze Match</button>
+          <div id="job-analysis-results" class="job-analysis-results hidden"></div>
+          <div id="add-keywords-panel" class="add-keywords-panel hidden">
+            <div class="akp-head">Suggested additions to your resume:</div>
+            <div id="akp-list"></div>
+            <div class="row mt"><button type="button" id="btn-apply-keywords">+ Add checked keywords to resume</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
 
     <footer class="app-foot">Marked-hard IDs persist in your browser (localStorage).</footer>
   </div>
