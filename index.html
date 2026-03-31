@@ -87,6 +87,10 @@
         <input type="checkbox" id="mock-hardonly" />
         <label for="mock-hardonly">Draw only from “hard” tagged + your marked-hard set</label>
       </div>
+      <div class="check-row">
+        <input type="checkbox" id="mock-adaptive" checked />
+        <label for="mock-adaptive">Adaptive (CAT-style) — difficulty rises as you answer correctly, eases when you struggle</label>
+      </div>
       <div class="row mt">
         <button type="button" id="mock-start">Begin exam</button>
         <button type="button" id="mock-cancel" class="secondary">Back</button>
@@ -165,6 +169,7 @@
       </div>
       <div id="run-progress" class="q-meta"></div>
       <div id="run-live-score" class="run-live-score hidden"></div>
+      <div id="cat-indicator" class="cat-indicator hidden"></div>
       <div id="run-question-block"></div>
       <div class="row mt">
         <button type="button" id="btn-prev" class="secondary hidden">Previous</button>

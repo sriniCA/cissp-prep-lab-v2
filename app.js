@@ -457,10 +457,16 @@
     timerEnd: null,
     timerId: null,
     totalSeconds: 0,
-    timerTick: null,       // stored so resumeTimer can restart the interval
-    timerPauseStart: null, // Date.now() when paused, null when running
-    timerPausedMs: 0,      // cumulative ms spent paused this session
-    lastByDomain: {}       // stored after finishExam for gap analysis
+    timerTick: null,
+    timerPauseStart: null,
+    timerPausedMs: 0,
+    lastByDomain: {},
+    // ── CAT (adaptive mode) ───────────────────────────────────────
+    adaptive: false,          // true when adaptive mode is active
+    adaptivePool: [],         // remaining unserved questions
+    adaptiveTotal: 0,         // target total question count
+    catTheta: 0.30,           // ability estimate 0.00–1.00 (starts just below medium)
+    catHistory: []            // [{correct, hard}] — last answered questions
   };
 
   function $(id) {
@@ -737,9 +743,17 @@
     const btnSubmit = $("btn-submit");
     const btnFinishStudy = $("btn-finish-study");
     const btnReveal = $("btn-reveal");
-    const isLast = state.index >= state.questions.length - 1;
+    const atLast = state.index >= state.questions.length - 1;
+    // In adaptive mode more questions will be loaded when Next is clicked,
+    // so "last" means: at last AND no more can be served
+    const canServeMore = state.adaptive &&
+      state.questions.length < state.adaptiveTotal &&
+      state.adaptivePool.length > 0;
+    const isLast = atLast && !canServeMore;
 
-    btnPrev.classList.toggle("hidden", state.index === 0 || state.strict);
+    // Prev: hidden in adaptive mode (CAT doesn't allow going back) or at start or strict
+    const hidePrev = state.index === 0 || state.strict || state.adaptive;
+    btnPrev.classList.toggle("hidden", hidePrev);
     btnNext.classList.toggle("hidden", isLast);
     btnSubmit.classList.toggle("hidden", state.mode !== "mock" || !isLast);
     btnFinishStudy.classList.toggle("hidden", state.mode !== "study" || !isLast);
@@ -764,6 +778,7 @@
     }
 
     updateLiveScore();
+    renderCatIndicator();
   }
 
   function goDelta(d) {
@@ -920,6 +935,10 @@
     if (elapsedStr) metaLines.push(`Time used: ${elapsedStr}`);
     if (pausedStr) metaLines.push(`⏸ Timer paused: ${pausedStr} (reviewing answers)`);
     if (revealedCount) metaLines.push(`Answers revealed: ${revealedCount}`);
+    if (state.adaptive) {
+      const { label } = catLevel();
+      metaLines.push(`📈 CAT mode — final level: <strong>${label}</strong> (θ = ${Math.round(state.catTheta * 100)}%)`);
+    }
     metaLines.push(`Pass threshold: ${PASS_PCT}%`);
     meta.innerHTML = metaLines.map(l => `<div>${l}</div>`).join("");
     scoreRight.appendChild(meta);
@@ -1342,21 +1361,40 @@
       const balanced = $("mock-balanced").checked;
       const strict = $("mock-strict").checked;
       const hardOnly = $("mock-hardonly").checked;
+      const adaptive = $("mock-adaptive") ? $("mock-adaptive").checked : false;
 
       const pool = filterPool(bank, { hardOnly });
       if (pool.length < Math.min(5, n)) {
         alert("Not enough questions in the filtered pool. Add items to questions.js or widen filters.");
         return;
       }
-      const picked = pickQuestions(pool, n, balanced);
+
       state.mode = "mock";
-      state.questions = picked;
-      state.answers = picked.map(() => null);
       state.revealed = new Set();
       state.index = 0;
       state.strict = strict;
       state.showExplanation = false;
-      $("run-title").textContent = "Mock exam";
+      state.adaptive = adaptive;
+      state.catTheta = 0.30;
+      state.catHistory = [];
+
+      if (adaptive) {
+        // CAT: give the engine the full shuffled pool; serve questions one-by-one
+        state.adaptivePool = shuffle(pool.slice());
+        state.adaptiveTotal = Math.min(n, state.adaptivePool.length);
+        // Serve the first question
+        const first = selectAdaptiveQuestion();
+        state.questions = first ? [first] : [];
+        state.answers = first ? [null] : [];
+      } else {
+        const picked = pickQuestions(pool, n, balanced);
+        state.questions = picked;
+        state.answers = picked.map(() => null);
+        state.adaptivePool = [];
+        state.adaptiveTotal = 0;
+      }
+
+      $("run-title").textContent = adaptive ? "Mock exam — Adaptive (CAT)" : "Mock exam";
       showView("view-run");
       startTimer(minutes * 60);
       $("btn-mark-hard").classList.remove("hidden");
@@ -1394,7 +1432,26 @@
     });
 
     $("btn-prev").addEventListener("click", () => { resumeTimer(); goDelta(-1); });
-    $("btn-next").addEventListener("click", () => { resumeTimer(); goDelta(1); });
+    $("btn-next").addEventListener("click", () => {
+      resumeTimer();
+      // In adaptive mode, update theta from the current answer before loading the next question
+      if (state.adaptive && state.index === state.questions.length - 1) {
+        const ans = state.answers[state.index];
+        if (ans !== null && ans !== undefined) {
+          const q = state.questions[state.index];
+          updateCatTheta(ans === q.correctIndex, q.hard);
+        }
+        // Load the next adaptive question if target count not yet reached
+        if (state.questions.length < state.adaptiveTotal && state.adaptivePool.length > 0) {
+          const next = selectAdaptiveQuestion();
+          if (next) {
+            state.questions.push(next);
+            state.answers.push(null);
+          }
+        }
+      }
+      goDelta(1);
+    });
 
     $("btn-reveal").addEventListener("click", () => {
       if (state.revealed.has(state.index)) {
@@ -1416,6 +1473,14 @@
       const unanswered = state.answers.some((a) => a === null || a === undefined);
       if (unanswered && !confirm("Some questions are unanswered. Submit anyway?")) return;
       resumeTimer();
+      // Commit theta for the final adaptive question before scoring
+      if (state.adaptive) {
+        const ans = state.answers[state.index];
+        if (ans !== null && ans !== undefined) {
+          const q = state.questions[state.index];
+          updateCatTheta(ans === q.correctIndex, q.hard);
+        }
+      }
       finishExam(false);
     });
 
@@ -1840,6 +1905,85 @@
     $("btn-mark-hard").classList.remove("hidden");
     showView("view-run");
     renderQuestion();
+  }
+
+  // ── CAT (Computerised Adaptive Testing) engine ───────────────────
+
+  /**
+   * Pick the next question from the adaptive pool based on current theta.
+   * theta > 0.5  → prefer hard questions
+   * theta ≤ 0.5  → prefer non-hard questions
+   * Falls back to the other tier when the preferred tier is empty.
+   */
+  function selectAdaptiveQuestion() {
+    if (state.adaptivePool.length === 0) return null;
+    const wantHard = state.catTheta > 0.50;
+    const preferred = state.adaptivePool.filter(q => wantHard ? q.hard : !q.hard);
+    const source = preferred.length > 0 ? preferred : state.adaptivePool;
+    // Pick randomly within preferred tier (avoid pure top-of-list bias)
+    const q = source[Math.floor(Math.random() * source.length)];
+    state.adaptivePool = state.adaptivePool.filter(x => x.id !== q.id);
+    return q;
+  }
+
+  /**
+   * Update ability estimate after an answer.
+   * Correct on hard question  → big gain   (+0.13)
+   * Correct on easy question  → small gain  (+0.07)
+   * Wrong on easy question    → bigger loss (−0.11)
+   * Wrong on hard question    → small loss  (−0.05)
+   */
+  function updateCatTheta(correct, isHard) {
+    if (correct) {
+      state.catTheta = Math.min(1.0, state.catTheta + (isHard ? 0.13 : 0.07));
+    } else {
+      state.catTheta = Math.max(0.0, state.catTheta - (isHard ? 0.05 : 0.11));
+    }
+    state.catHistory.push({ correct, hard: !!isHard });
+  }
+
+  /** Returns {label, cls} for the current theta level. */
+  function catLevel() {
+    const t = state.catTheta;
+    if (t < 0.25) return { label: "Foundational", cls: "cat-lvl-1" };
+    if (t < 0.50) return { label: "Standard",     cls: "cat-lvl-2" };
+    if (t < 0.75) return { label: "Advanced",     cls: "cat-lvl-3" };
+    return              { label: "Expert",         cls: "cat-lvl-4" };
+  }
+
+  /** Render the CAT difficulty indicator bar in #cat-indicator. */
+  function renderCatIndicator() {
+    const ind = $("cat-indicator");
+    if (!ind) return;
+    if (!state.adaptive) { ind.classList.add("hidden"); return; }
+    ind.classList.remove("hidden");
+
+    const { label, cls } = catLevel();
+    const pct = Math.round(state.catTheta * 100);
+    const served = state.questions.length;
+    const total  = state.adaptiveTotal;
+
+    // Sparkline: last 10 history items (filled from right)
+    const recentHistory = state.catHistory.slice(-10);
+    const dots = recentHistory.map(h => {
+      const outcome = h.correct ? "cat-dot-ok" : "cat-dot-bad";
+      const size    = h.hard    ? "cat-dot-lg" : "cat-dot-sm";
+      const tip     = (h.hard ? "Hard" : "Std") + " — " + (h.correct ? "✓" : "✗");
+      return `<span class="cat-dot ${outcome} ${size}" title="${tip}"></span>`;
+    }).join("");
+
+    ind.innerHTML =
+      `<div class="cat-row">` +
+        `<span class="cat-label">Adaptive Level</span>` +
+        `<span class="cat-badge ${cls}">${label}</span>` +
+        `<div class="cat-bar-wrap" title="Ability estimate: ${pct}%">` +
+          `<div class="cat-bar-fill ${cls}" style="width:${pct}%"></div>` +
+        `</div>` +
+        `<span class="cat-count">${served}/${total}</span>` +
+        (recentHistory.length > 0
+          ? `<span class="cat-spark">${dots}</span>`
+          : "") +
+      `</div>`;
   }
 
   bind();
