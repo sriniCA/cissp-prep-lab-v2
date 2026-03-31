@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CISSP Prep — Practice & Mock Exam</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>CISSP Prep Lab</h1>
+      <p class="subtitle">Domain drills, hard-question sets, and timed mock exams (runs offline from this folder).</p>
+    </header>
+
+    <!-- Home -->
+    <section id="view-home" class="panel">
+      <h2>Mode</h2>
+      <div class="row mb">
+        <button type="button" id="btn-mock">Mock exam (CISSP-style)</button>
+        <button type="button" id="btn-study" class="secondary">Study / practice</button>
+        <button type="button" id="btn-concepts" class="secondary">Key Concepts</button>
+        <button type="button" id="btn-materials" class="secondary">📄 Materials</button>
+        <button type="button" id="btn-help" class="secondary">Import material</button>
+      </div>
+      <p class="help-content" style="margin:0">
+        Mock mode uses a linear exam shell: fixed item count, four options, single-select, countdown timer (similar length to the English CAT appointment window). Adaptive scoring is not replicated—use it for stamina and coverage.
+      </p>
+
+      <hr class="home-divider" />
+      <h2>Quick Domain Test</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.85rem">Click any domain to start a focused study session with all questions from that domain.</p>
+      <div id="domain-quick-grid" class="domain-quick-grid"></div>
+    </section>
+
+    <!-- Mock setup -->
+    <section id="view-mock-setup" class="panel hidden">
+      <h2>Mock exam setup</h2>
+      <div class="grid-2">
+        <label class="field">
+          <span class="label-text">Number of questions</span>
+          <input type="number" id="mock-count" min="25" max="175" value="125" />
+        </label>
+        <label class="field">
+          <span class="label-text">Time limit (minutes)</span>
+          <input type="number" id="mock-minutes" min="30" max="300" value="240" />
+        </label>
+      </div>
+      <div class="check-row mt">
+        <input type="checkbox" id="mock-balanced" checked />
+        <label for="mock-balanced">Balance roughly evenly across all 8 domains (when enough items exist)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="mock-strict" />
+        <label for="mock-strict">Strict: cannot change answers after advancing (closer to high-stakes flow)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="mock-hardonly" />
+        <label for="mock-hardonly">Draw only from “hard” tagged + your marked-hard set</label>
+      </div>
+      <div class="row mt">
+        <button type="button" id="mock-start">Begin exam</button>
+        <button type="button" id="mock-cancel" class="secondary">Back</button>
+      </div>
+    </section>
+
+    <!-- Study setup -->
+    <section id="view-study-setup" class="panel hidden">
+      <h2>Study filters</h2>
+      <div class="field mb">
+        <div class="domain-checks-header">
+          <span class="label-text">Domains (leave all checked for mixed)</span>
+          <div class="row" style="gap:0.4rem">
+            <button type="button" id="domain-select-all" class="secondary btn-xs">Select All</button>
+            <button type="button" id="domain-deselect-all" class="secondary btn-xs">Deselect All</button>
+          </div>
+        </div>
+        <div id="domain-checks" class="domain-checks"></div>
+      </div>
+      <div class="grid-2">
+        <label class="field">
+          <span class="label-text">Question count</span>
+          <input type="number" id="study-count" min="5" max="200" value="20" />
+        </label>
+        <label class="field">
+          <span class="label-text">Order</span>
+          <select id="study-order">
+            <option value="shuffle">Shuffled</option>
+            <option value="domain">Grouped by domain</option>
+          </select>
+        </label>
+      </div>
+      <div class="check-row mt">
+        <input type="checkbox" id="study-hard-bank" />
+        <label for="study-hard-bank">Hard bank only (tagged hard + your marked-hard)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="study-show-exp" checked />
+        <label for="study-show-exp">Show explanation after each answer</label>
+      </div>
+      <div class="row mt">
+        <button type="button" id="study-start">Start session</button>
+        <button type="button" id="study-cancel" class="secondary">Back</button>
+      </div>
+    </section>
+
+    <!-- Help / import -->
+    <section id="view-help" class="panel hidden">
+      <h2>Using your own material</h2>
+      <div class="help-content">
+        <p>Place questions in <code>data/questions.js</code> as the <code>window.CISSP_BANK</code> array, or merge JSON you export into that structure. Each object needs:</p>
+        <pre>{
+  "id": "unique-id",
+  "domain": "identity_access_management",
+  "domainLabel": "Identity and Access Management",
+  "text": "Question stem?",
+  "choices": ["A", "B", "C", "D"],
+  "correctIndex": 0,
+  "hard": false,
+  "explanation": "Why the answer is correct."
+}</pre>
+        <p>Allowed <code>domain</code> slugs (8 CBK areas): <code>security_and_risk_management</code>, <code>asset_security</code>, <code>security_architecture_engineering</code>, <code>communication_network_security</code>, <code>identity_access_management</code>, <code>security_assessment_testing</code>, <code>security_operations</code>, <code>software_development_security</code></p>
+        <p>Open <code>index.html</code> in a browser from this folder, or run <code>python3 -m http.server 8080</code> here and visit <code>http://127.0.0.1:8080</code>.</p>
+      </div>
+      <button type="button" id="help-close" class="secondary mt">Back</button>
+    </section>
+
+    <!-- Exam / study run -->
+    <section id="view-run" class="panel hidden">
+      <div class="row spread mb">
+        <div id="run-title" style="font-weight:600">Session</div>
+        <div id="run-timer-wrap" class="hidden" style="min-width:140px;text-align:right">
+          <div id="run-timer-text" style="font-size:1.1rem;font-variant-numeric:tabular-nums"></div>
+          <div class="timer-bar" id="run-timer-bar"><div id="run-timer-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div id="run-progress" class="q-meta"></div>
+      <div id="run-live-score" class="run-live-score hidden"></div>
+      <div id="run-question-block"></div>
+      <div class="row mt">
+        <button type="button" id="btn-prev" class="secondary hidden">Previous</button>
+        <button type="button" id="btn-next">Next</button>
+        <button type="button" id="btn-finish-study" class="hidden secondary">Finish session</button>
+        <button type="button" id="btn-submit" class="hidden danger">Submit exam</button>
+      </div>
+      <div class="row mt">
+        <button type="button" id="btn-reveal" class="reveal-btn">Show Answer &amp; Explanation</button>
+        <button type="button" id="btn-mark-hard" class="secondary">Mark as hard for me</button>
+        <button type="button" id="btn-abort" class="secondary">Exit</button>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section id="view-results" class="hidden">
+
+      <!-- Score card -->
+      <div id="results-scorecard" class="panel"></div>
+
+      <!-- Domain bars -->
+      <div id="results-by-domain" class="panel hidden"></div>
+
+      <!-- Session history -->
+      <div id="results-history" class="panel hidden"></div>
+
+      <!-- Review -->
+      <div class="panel">
+        <div class="row spread mb">
+          <h2 style="margin:0">Question Review</h2>
+          <div class="row" id="review-filters">
+            <button type="button" class="secondary rev-filter-btn active" data-filter="all">All</button>
+            <button type="button" class="secondary rev-filter-btn" data-filter="wrong">Wrong</button>
+            <button type="button" class="secondary rev-filter-btn" data-filter="correct">Correct</button>
+            <button type="button" class="secondary rev-filter-btn" data-filter="skipped">Skipped</button>
+          </div>
+        </div>
+        <div id="results-review"></div>
+      </div>
+
+      <button type="button" id="results-home" class="mt">Back to Home</button>
+    </section>
+
+    <!-- Study Materials / PDF Resources -->
+    <section id="view-resources" class="hidden">
+      <div class="res-topbar">
+        <button type="button" id="resources-back" class="secondary">← Back</button>
+        <h2 style="margin:0;font-size:1.1rem;font-weight:700;color:var(--text)">Study Materials</h2>
+      </div>
+
+      <!-- Local folder path config -->
+      <div class="res-path-panel panel">
+        <div class="res-path-row">
+          <span class="res-path-label">Local folder path</span>
+          <input type="text" id="res-base-path" class="res-path-input"
+                 placeholder="/Users/you/Downloads/CISSP/" spellcheck="false" />
+          <button type="button" id="res-path-save" class="secondary">Save path</button>
+        </div>
+        <p class="res-note">
+          <strong>Local links</strong> open PDFs directly in your browser using <code>file://</code>.
+          Works in <strong>Firefox</strong> and <strong>Safari</strong> by default.
+          In Chrome, launch it with <code>--allow-file-access-from-files</code>,
+          or run <code>python3 -m http.server 8080</code> in your CISSP folder and open
+          <code>http://127.0.0.1:8080</code> instead.
+          <strong>Google Drive links</strong> — paste any shared Drive / direct URL and it opens in a new tab. Links are saved locally in your browser.
+        </p>
+      </div>
+
+      <div id="resources-list"></div>
+    </section>
+
+    <!-- Key Concepts viewer -->
+    <section id="view-concepts" class="hidden">
+      <div class="concepts-topbar">
+        <button type="button" id="concepts-back" class="secondary">← Back</button>
+        <div id="concepts-breadcrumb" class="concepts-breadcrumb"></div>
+      </div>
+      <div id="concepts-content"></div>
+    </section>
+
+    <footer class="app-foot">Marked-hard IDs persist in your browser (localStorage).</footer>
+  </div>
+
+  <script src="data/questions.js"></script>
+  <script src="data/concepts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

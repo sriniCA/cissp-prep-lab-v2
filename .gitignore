@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local PDF files — never commit copyrighted PDFs
+*.pdf
+
+# Node (if ever added)
+node_modules/
