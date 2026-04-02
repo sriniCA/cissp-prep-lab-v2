@@ -3079,19 +3079,20 @@
           `<div class="match-kw-list">${missing.map(k => `<span class="mkw mkw-miss">${k}</span>`).join("")}</div>`
         : "");
 
-    // Store for optimised-resume generator
-    _lastMissingKws = missing;
-    _lastFoundKws   = found;
+    // Store for highlight / modify / PDF generator
+    _lastMissingKws   = missing;
+    _lastFoundKws     = found;
+    _lastAnalysisType = "job";
 
-    // Show/hide the generate-optimised button
-    const genBtn = $("btn-generate-optimized");
-    if (genBtn) {
-      if (total > 0) {
-        genBtn.classList.remove("hidden");
-        genBtn.textContent = `🚀 Generate Optimized Resume PDF  (${missing.length} keywords added)`;
-      } else {
-        genBtn.classList.add("hidden");
-      }
+    // Show action bar
+    const actionBar = $("ra-action-bar");
+    if (actionBar && total > 0) {
+      actionBar.classList.remove("hidden");
+      const modBtn = actionBar.querySelector("#btn-modify-resume");
+      if (modBtn) modBtn.innerHTML =
+        `&#x270F; Modify Resume <small style="display:block;font-size:.68rem;opacity:.8;font-weight:500">${missing.length} skill${missing.length !== 1 ? "s" : ""} missing</small>`;
+    } else if (actionBar) {
+      actionBar.classList.add("hidden");
     }
 
     // Suggestions panel
@@ -3176,25 +3177,24 @@
       }
     });
 
-    // Market gap summary
+    // Gap summary
     if (totalMissing > 0) {
       html +=
         `<div class="ra-gap-summary">` +
-          `<strong>${totalMissing} skills missing</strong> — ` +
-          `click <em>Generate Optimized Resume PDF</em> below to add them automatically.` +
+          `<strong>${totalMissing} skills missing</strong> — use <em>Modify Resume</em> below to add them.` +
         `</div>`;
     }
 
     results.innerHTML = html;
     results.classList.remove("hidden");
 
-    const genBtn = $("btn-generate-optimized");
-    if (genBtn) {
-      genBtn.classList.remove("hidden");
-      genBtn.innerHTML =
-        `&#x1F680; Generate Market-Optimized Resume PDF` +
-        `<small style="display:block;font-size:0.72rem;opacity:.85;font-weight:500;margin-top:2px">` +
-        `${totalMissing} missing market skills will be added</small>`;
+    // Show action bar
+    const actionBar = $("ra-action-bar");
+    if (actionBar) {
+      actionBar.classList.remove("hidden");
+      const modBtn = actionBar.querySelector("#btn-modify-resume");
+      if (modBtn) modBtn.innerHTML =
+        `&#x270F; Modify Resume <small style="display:block;font-size:.68rem;opacity:.8;font-weight:500">${totalMissing} skill${totalMissing !== 1 ? "s" : ""} missing</small>`;
     }
   }
 
@@ -3258,6 +3258,289 @@
     saveResumeDraft();
     $("add-keywords-panel").classList.add("hidden");
     editor.scrollTop = editor.scrollHeight;
+  }
+
+  // ── Highlight view ───────────────────────────────────────────────
+
+  function highlightMatchesInEditor() {
+    const editor  = $("resume-editor");
+    const hlView  = $("resume-hl-view");
+    const hlBar   = $("resume-hl-toolbar");
+    if (!editor || !hlView || !hlBar) return;
+    if (_lastFoundKws.length === 0 && _lastMissingKws.length === 0) {
+      alert("Please run an analysis first."); return;
+    }
+
+    // Deep-clone the editor DOM so we never alter the live content
+    const clone = editor.cloneNode(true);
+
+    // Build one combined regex for all found keywords (longest first → avoids partial shadowing)
+    const patterns = [..._lastFoundKws]
+      .sort((a, b) => b.length - a.length)
+      .map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+    if (patterns.length > 0) {
+      const re = new RegExp(`(${patterns.join("|")})`, "gi");
+
+      // Walk only TEXT nodes — safe, never touches HTML attributes or tag names
+      const walkAndMark = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent;
+          if (!re.test(text)) { re.lastIndex = 0; return; }
+          re.lastIndex = 0;
+
+          const frag = document.createDocumentFragment();
+          let last = 0, m;
+          while ((m = re.exec(text)) !== null) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            const mark = document.createElement("mark");
+            mark.className = "hl-found";
+            mark.textContent = m[0];
+            frag.appendChild(mark);
+            last = re.lastIndex;
+          }
+          if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+          node.parentNode.replaceChild(frag, node);
+
+        } else if (node.nodeType === Node.ELEMENT_NODE && !["SCRIPT","STYLE","MARK"].includes(node.tagName)) {
+          Array.from(node.childNodes).forEach(walkAndMark); // copy children list first
+        }
+      };
+      walkAndMark(clone);
+    }
+
+    // Append missing-skills summary at the bottom of the preview
+    if (_lastMissingKws.length > 0) {
+      const div = document.createElement("div");
+      div.className = "hl-missing-summary";
+      div.innerHTML =
+        `<div class="hl-miss-head">&#x26A0; ${_lastMissingKws.length} Missing Skills — Consider Adding</div>` +
+        `<div class="hl-miss-tags">${_lastMissingKws.map(kw => `<span class="hl-miss-tag">${_escHTML(kw)}</span>`).join("")}</div>`;
+      clone.appendChild(div);
+    }
+
+    hlView.innerHTML = clone.innerHTML;
+    hlView.classList.remove("hidden");
+    editor.classList.add("hl-editor-hidden");
+    hlBar.classList.remove("hidden");
+  }
+
+  function closeHighlights() {
+    const editor = $("resume-editor");
+    const hlView = $("resume-hl-view");
+    const hlBar  = $("resume-hl-toolbar");
+    if (editor) editor.classList.remove("hl-editor-hidden");
+    if (hlView) hlView.classList.add("hidden");
+    if (hlBar)  hlBar.classList.add("hidden");
+  }
+
+  // ── Modify-Resume drawer ─────────────────────────────────────────
+
+  function _buildModifySkillsHTML() {
+    if (_lastAnalysisType === "market") {
+      const tierOrder = ["critical","high","medium","emerging"];
+      const tierLabel = { critical:"🔴 Critical Demand", high:"🟠 High Demand", medium:"🔵 Medium Demand", emerging:"🟣 Emerging" };
+      let html = "";
+      tierOrder.forEach(tier => {
+        const items = _lastMissingKws.filter(kw => {
+          const m = CISSP_MARKET_SKILLS.find(s => s.skill === kw);
+          return m && m.demand === tier;
+        });
+        if (items.length === 0) return;
+        html += `<div class="md-group-head">${tierLabel[tier]}</div>`;
+        items.forEach(kw => {
+          html +=
+            `<label class="md-item">` +
+              `<input type="checkbox" class="md-cb" value="${_escHTML(kw)}" checked>` +
+              `<span class="md-kw">${_escHTML(kw)}</span>` +
+            `</label>`;
+        });
+      });
+      return html;
+    }
+    return _lastMissingKws.map(kw =>
+      `<label class="md-item"><input type="checkbox" class="md-cb" value="${_escHTML(kw)}" checked><span class="md-kw">${_escHTML(kw)}</span></label>`
+    ).join("");
+  }
+
+  function updateModifyPreview() {
+    const drawer = $("resume-modify-drawer");
+    const box    = $("md-preview-box");
+    if (!drawer || !box) return;
+
+    const selected   = Array.from(drawer.querySelectorAll(".md-cb:checked")).map(cb => cb.value);
+    const addSummary = drawer.querySelector('.md-special-cb[value="summary"]');
+    const wantSummary= addSummary && addSummary.checked;
+
+    let html = "";
+    if (wantSummary && selected.length > 0) {
+      const topKws = selected.slice(0, 4).join(", ");
+      html +=
+        `<div class="md-preview-block">` +
+          `<div class="md-preview-block-head">+ Professional Summary</div>` +
+          `<p>Results-driven cybersecurity professional with expertise in ${_escHTML(topKws)}. ` +
+          `Proven ability to design security programs aligned with business objectives...</p>` +
+        `</div>`;
+    }
+    if (selected.length > 0) {
+      html +=
+        `<div class="md-preview-block">` +
+          `<div class="md-preview-block-head">+ Core Security Competencies (${selected.length})</div>` +
+          `<div class="md-preview-skill-grid">${selected.map(s => `<span class="md-preview-skill">${_escHTML(s)}</span>`).join("")}</div>` +
+        `</div>`;
+    }
+    box.innerHTML = html ||
+      `<div class="md-preview-empty">Select skills on the left to preview what will be added.</div>`;
+  }
+
+  function showModifyDrawer() {
+    const drawer  = $("resume-modify-drawer");
+    const overlay = $("resume-modify-overlay");
+    if (!drawer) return;
+    if (_lastMissingKws.length === 0) {
+      alert("No missing skills detected. Run an analysis first, or your resume already covers everything!"); return;
+    }
+
+    const resumeText   = ($("resume-editor") ? $("resume-editor").innerText : "").toLowerCase();
+    const hasSummary   = resumeText.match(/\b(summary|profile|objective|about me)\b/i);
+    const isMarket     = _lastAnalysisType === "market";
+    const contextLabel = isMarket ? "CISSP Market Skills" : "Job Description";
+
+    const summaryRow = hasSummary ? "" :
+      `<div class="md-special-row">` +
+        `<label class="md-item md-special">` +
+          `<input type="checkbox" class="md-special-cb" value="summary" checked>` +
+          `<span class="md-kw">Add Professional Summary paragraph</span>` +
+        `</label>` +
+      `</div>`;
+
+    drawer.innerHTML =
+      `<div class="md-header">` +
+        `<div class="md-header-left">` +
+          `<div class="md-title">&#x270F; Modify Resume</div>` +
+          `<div class="md-subtitle">Source: ${_escHTML(contextLabel)} &nbsp;·&nbsp; ` +
+            `${_lastMissingKws.length} missing skills &nbsp;·&nbsp; ` +
+            `${_lastFoundKws.length} already present</div>` +
+        `</div>` +
+        `<button type="button" class="md-close" id="btn-md-close">&#x2715;</button>` +
+      `</div>` +
+      `<div class="md-body">` +
+        `<div class="md-col md-left">` +
+          `<div class="md-col-head">` +
+            `&#x2795; Skills to Add` +
+            `<div class="md-sel-row">` +
+              `<button type="button" class="md-sel-btn" id="md-sel-all">All</button>` +
+              `<button type="button" class="md-sel-btn" id="md-sel-none">None</button>` +
+            `</div>` +
+          `</div>` +
+          summaryRow +
+          `<div class="md-items-scroll">${_buildModifySkillsHTML()}</div>` +
+        `</div>` +
+        `<div class="md-col md-right">` +
+          `<div class="md-col-head">&#x1F441; Changes Preview</div>` +
+          `<div class="md-preview-box" id="md-preview-box">` +
+            `<div class="md-preview-empty">Select skills on the left to preview what will be added.</div>` +
+          `</div>` +
+        `</div>` +
+      `</div>` +
+      `<div class="md-footer">` +
+        `<button type="button" class="md-btn-secondary" id="btn-md-close2">Cancel</button>` +
+        `<button type="button" class="md-apply-btn" id="btn-md-apply">&#x2705; Apply Changes</button>` +
+        `<button type="button" class="md-apply-pdf-btn" id="btn-md-apply-pdf">&#x1F680; Apply &amp; Generate PDF</button>` +
+      `</div>`;
+
+    // Wire internal buttons
+    const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    wire("btn-md-close",   closeModifyDrawer);
+    wire("btn-md-close2",  closeModifyDrawer);
+    wire("md-sel-all",  () => { drawer.querySelectorAll(".md-cb,.md-special-cb").forEach(c => { c.checked = true;  }); updateModifyPreview(); });
+    wire("md-sel-none", () => { drawer.querySelectorAll(".md-cb,.md-special-cb").forEach(c => { c.checked = false; }); updateModifyPreview(); });
+    wire("btn-md-apply",     () => applyModifyChanges(false));
+    wire("btn-md-apply-pdf", () => applyModifyChanges(true));
+
+    drawer.querySelectorAll(".md-cb,.md-special-cb").forEach(c => c.addEventListener("change", updateModifyPreview));
+
+    if (overlay) overlay.classList.remove("hidden");
+    drawer.classList.remove("hidden");
+    updateModifyPreview();
+  }
+
+  function closeModifyDrawer() {
+    const drawer  = $("resume-modify-drawer");
+    const overlay = $("resume-modify-overlay");
+    if (drawer)  drawer.classList.add("hidden");
+    if (overlay) overlay.classList.add("hidden");
+  }
+
+  function applyModifyChanges(andGeneratePDF) {
+    const drawer = $("resume-modify-drawer");
+    if (!drawer) return;
+    const editor = $("resume-editor");
+    if (!editor) return;
+
+    const selected   = Array.from(drawer.querySelectorAll(".md-cb:checked")).map(cb => cb.value);
+    const addSummary = drawer.querySelector('.md-special-cb[value="summary"]');
+    const wantSummary= addSummary && addSummary.checked;
+    const isMarket   = _lastAnalysisType === "market";
+
+    let additions = "";
+
+    if (wantSummary) {
+      const topKws = selected.slice(0, 5).join(", ") || "security operations and risk management";
+      const ctx = isMarket ? "in-demand CISSP market competencies" : "the target role requirements";
+      additions +=
+        `<h2>Professional Summary</h2>` +
+        `<p>Results-driven cybersecurity professional with expertise in ${topKws}. ` +
+        `Demonstrated ability to design and manage security programs aligned with business objectives ` +
+        `and ${ctx}.</p>`;
+    }
+
+    if (selected.length > 0) {
+      const resumeText = editor.innerText.toLowerCase();
+      const hasSkills  = resumeText.match(/\b(skills|competencies|capabilities|proficiencies)\b/i);
+      const sectionTitle = hasSkills ? "Additional Security Competencies" : "Core Security Competencies";
+
+      let skillItems = "";
+      if (isMarket) {
+        const tierOrder = ["critical","high","medium","emerging"];
+        const tierLabel = { critical:"Critical Demand", high:"High Demand", medium:"Medium Demand", emerging:"Emerging" };
+        tierOrder.forEach(tier => {
+          const items = selected.filter(kw => { const m = CISSP_MARKET_SKILLS.find(s => s.skill === kw); return m && m.demand === tier; });
+          if (items.length > 0) {
+            skillItems +=
+              `<li style="list-style:none;font-weight:700;color:#1a56a0;margin-top:6px;font-size:9pt">${tierLabel[tier]}</li>` +
+              items.map(kw => `<li>${_escHTML(kw)}</li>`).join("");
+          }
+        });
+      } else {
+        skillItems = selected.map(kw => `<li>${_escHTML(kw)}</li>`).join("");
+      }
+
+      additions += `<h2>${sectionTitle}</h2><ul class="comp-grid">${skillItems}</ul>`;
+    }
+
+    if (additions) {
+      editor.innerHTML += "\n" + additions;
+      updateWordCount();
+      saveResumeDraft();
+    }
+
+    // Update tracking — applied skills are no longer "missing"
+    _lastMissingKws = _lastMissingKws.filter(kw => !selected.includes(kw));
+    _lastFoundKws   = [..._lastFoundKws, ...selected];
+
+    closeModifyDrawer();
+
+    // Toast feedback via the PDF status bar
+    const bar  = $("pdf-parse-status");
+    const fill = $("pdf-parse-fill");
+    const msg  = $("pdf-parse-msg");
+    if (bar) bar.classList.remove("hidden");
+    if (fill) { fill.style.background = ""; fill.style.width = "100%"; }
+    if (msg) msg.textContent = `✓ ${selected.length} skill${selected.length !== 1 ? "s" : ""} added to your resume`;
+    setTimeout(() => { if (bar) bar.classList.add("hidden"); }, 3000);
+
+    if (andGeneratePDF) setTimeout(generateOptimizedResumePDF, 500);
   }
 
   function generateOptimizedResumePDF() {
@@ -3512,14 +3795,30 @@ ${additions}
       const el = $(id);
       if (el && !el.dataset.wired) { el.dataset.wired = "1"; el.addEventListener("click", fn); }
     };
-    wireOnce("btn-resume-save",         () => { saveResumeDraft(); const b = $("btn-resume-save"); b.textContent = "✓ Saved"; setTimeout(() => { b.textContent = "💾 Save Draft"; }, 1500); });
-    wireOnce("btn-resume-dl-txt",       downloadResumeTxt);
-    wireOnce("btn-resume-print",        printResumeAsPDF);
-    wireOnce("btn-analyze-market",      analyzeVsMarket);
-    wireOnce("btn-fetch-url",           fetchJobUrl);
-    wireOnce("btn-analyze-job",         analyzeJobMatch);
-    wireOnce("btn-apply-keywords",      applyKeywordsToResume);
-    wireOnce("btn-generate-optimized",  generateOptimizedResumePDF);
+    wireOnce("btn-resume-save",     () => { saveResumeDraft(); const b = $("btn-resume-save"); b.textContent = "✓ Saved"; setTimeout(() => { b.textContent = "💾 Save Draft"; }, 1500); });
+    wireOnce("btn-resume-dl-txt",   downloadResumeTxt);
+    wireOnce("btn-resume-print",    printResumeAsPDF);
+    wireOnce("btn-analyze-market",  analyzeVsMarket);
+    wireOnce("btn-fetch-url",       fetchJobUrl);
+    wireOnce("btn-analyze-job",     analyzeJobMatch);
+    wireOnce("btn-apply-keywords",  applyKeywordsToResume);
+    // Highlight toggle
+    wireOnce("btn-highlight-resume", () => {
+      if ($("resume-hl-view") && !$("resume-hl-view").classList.contains("hidden")) {
+        closeHighlights();
+      } else {
+        highlightMatchesInEditor();
+      }
+    });
+    wireOnce("btn-hl-close",        closeHighlights);
+    // Modify drawer
+    wireOnce("btn-modify-resume",   showModifyDrawer);
+    // Overlay click closes drawer
+    const overlay = $("resume-modify-overlay");
+    if (overlay && !overlay.dataset.wired) {
+      overlay.dataset.wired = "1";
+      overlay.addEventListener("click", closeModifyDrawer);
+    }
   }
 
   // ── Voice Mode ───────────────────────────────────────────────────

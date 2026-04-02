@@ -462,6 +462,20 @@
           </div>
           <div id="resume-editor" class="resume-editor" contenteditable="true" spellcheck="true"
                data-placeholder="Paste or type your resume here, or upload a PDF / .txt file above…"></div>
+
+          <!-- ── Highlight-view toolbar (visible only in preview mode) -->
+          <div id="resume-hl-toolbar" class="resume-hl-toolbar hidden">
+            <div class="hl-legend-row">
+              <span class="hl-legend-item"><mark class="hl-found hl-sample">&nbsp;■&nbsp;</mark> Skills present</span>
+              <span class="hl-legend-item hl-miss-legend">&#x26A0; Missing skills listed below</span>
+            </div>
+            <button type="button" id="btn-hl-close" class="secondary">&#x2715; Back to Editing</button>
+          </div>
+
+          <!-- ── Read-only highlighted preview (swaps with editor) -->
+          <div id="resume-hl-view" class="resume-editor resume-hl-view hidden"
+               aria-label="Highlighted resume preview — read-only"></div>
+
           <div class="resume-char-count"><span id="resume-word-count">0 words</span></div>
         </div>
 
@@ -525,13 +539,24 @@
             </div>
           </div>
 
-          <!-- ── Shared: Generate optimized PDF (shown after any analysis) -->
-          <button type="button" id="btn-generate-optimized" class="resume-gen-btn hidden">
-            &#x1F680; Generate Optimized Resume PDF
-          </button>
+          <!-- ── Shared action bar (shown after any analysis) ─────── -->
+          <div id="ra-action-bar" class="ra-action-bar hidden">
+            <button type="button" id="btn-highlight-resume" class="ra-action-btn ra-hl-btn">
+              &#x1F50D; View Highlights
+            </button>
+            <button type="button" id="btn-modify-resume" class="ra-action-btn ra-modify-btn">
+              &#x270F; Modify Resume
+            </button>
+          </div>
 
         </div>
       </div>
+
+      <!-- ── Modify-Resume drawer (full-screen modal, content injected by JS) -->
+      <div id="resume-modify-overlay" class="resume-modify-overlay hidden"></div>
+      <div id="resume-modify-drawer" class="resume-modify-drawer hidden" role="dialog"
+           aria-modal="true" aria-label="Modify Resume"></div>
+
     </section>
 
 
