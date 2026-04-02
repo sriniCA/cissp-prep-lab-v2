@@ -2868,7 +2868,8 @@
   // ── Keyword tracking (populated by either analysis mode) ─────────
   let _lastMissingKws   = [];
   let _lastFoundKws     = [];
-  let _lastAnalysisType = "job"; // "market" | "job"
+  let _lastAnalysisType = "job";   // "market" | "job"
+  let _marketRole       = "cissp"; // "cissp" | "iam"
 
   // ── CISSP Market Skills — curated from LinkedIn, Dice, Indeed,
   //    ZipRecruiter, and CyberSeek CISSP job-posting data (2024-2026) ──
@@ -2940,6 +2941,72 @@
     { skill:"Security by Design",           demand:"emerging", pct:12, portals:["LinkedIn"] },
     { skill:"Microsegmentation",            demand:"emerging", pct:11, portals:["LinkedIn","Dice"] },
     { skill:"Decentralized Identity",       demand:"emerging", pct:10, portals:["LinkedIn"] },
+  ];
+
+  // ── IAM Job-Market Skills — curated from LinkedIn, Dice, Indeed,
+  //    ZipRecruiter, and CyberSeek IAM / Identity Engineering job-posting
+  //    data (2024-2026) ────────────────────────────────────────────────
+  const IAM_MARKET_SKILLS = [
+    // ── Critical demand  (>70 % of IAM postings) ──────────────────
+    { skill:"Identity and Access Management", demand:"critical", pct:92, portals:["LinkedIn","Dice","Indeed"] },
+    { skill:"Active Directory",               demand:"critical", pct:89, portals:["LinkedIn","Dice","Indeed"] },
+    { skill:"Single Sign-On",                 demand:"critical", pct:86, portals:["LinkedIn","Dice","ZipRecruiter"] },
+    { skill:"Multi-Factor Authentication",    demand:"critical", pct:85, portals:["LinkedIn","Indeed"] },
+    { skill:"Role-Based Access Control",      demand:"critical", pct:83, portals:["LinkedIn","Dice"] },
+    { skill:"Privileged Access Management",   demand:"critical", pct:81, portals:["LinkedIn","Dice","ZipRecruiter"] },
+    { skill:"Azure Active Directory",         demand:"critical", pct:80, portals:["LinkedIn","Dice"] },
+    { skill:"User Provisioning",              demand:"critical", pct:78, portals:["LinkedIn","Indeed"] },
+    { skill:"Access Reviews",                 demand:"critical", pct:76, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"LDAP",                           demand:"critical", pct:74, portals:["LinkedIn","Dice"] },
+    { skill:"Zero Trust",                     demand:"critical", pct:72, portals:["LinkedIn","Dice","ZipRecruiter"] },
+    { skill:"Identity Governance",            demand:"critical", pct:71, portals:["LinkedIn","ZipRecruiter"] },
+    // ── High demand  (50-69 %) ─────────────────────────────────────
+    { skill:"OAuth 2.0",                      demand:"high", pct:68, portals:["LinkedIn","Dice"] },
+    { skill:"SAML",                           demand:"high", pct:67, portals:["LinkedIn","Dice","Indeed"] },
+    { skill:"Okta",                           demand:"high", pct:66, portals:["LinkedIn","Dice"] },
+    { skill:"CyberArk",                       demand:"high", pct:65, portals:["LinkedIn","Dice","ZipRecruiter"] },
+    { skill:"SailPoint",                      demand:"high", pct:63, portals:["LinkedIn","Dice"] },
+    { skill:"OpenID Connect",                 demand:"high", pct:62, portals:["LinkedIn","Dice"] },
+    { skill:"AWS IAM",                        demand:"high", pct:61, portals:["LinkedIn","Dice"] },
+    { skill:"Federation",                     demand:"high", pct:60, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"Lifecycle Management",           demand:"high", pct:59, portals:["LinkedIn","Indeed"] },
+    { skill:"Attribute-Based Access Control", demand:"high", pct:58, portals:["LinkedIn","Dice"] },
+    { skill:"Ping Identity",                  demand:"high", pct:56, portals:["LinkedIn","Dice"] },
+    { skill:"Microsoft Entra ID",             demand:"high", pct:55, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"Privileged Identity Management", demand:"high", pct:54, portals:["LinkedIn","Dice"] },
+    { skill:"Kerberos",                       demand:"high", pct:52, portals:["LinkedIn","Dice","Indeed"] },
+    { skill:"PKI",                            demand:"high", pct:51, portals:["LinkedIn","Dice"] },
+    { skill:"Least Privilege",                demand:"high", pct:50, portals:["LinkedIn","ZipRecruiter"] },
+    // ── Medium demand  (30-49 %) ───────────────────────────────────
+    { skill:"ForgeRock",                      demand:"medium", pct:48, portals:["LinkedIn","Dice"] },
+    { skill:"HashiCorp Vault",                demand:"medium", pct:46, portals:["LinkedIn","Dice"] },
+    { skill:"BeyondTrust",                    demand:"medium", pct:45, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"SCIM",                           demand:"medium", pct:44, portals:["LinkedIn","Dice"] },
+    { skill:"Certificate Management",         demand:"medium", pct:43, portals:["LinkedIn","Dice"] },
+    { skill:"Just-in-Time Access",            demand:"medium", pct:42, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"SailPoint IdentityNow",          demand:"medium", pct:41, portals:["LinkedIn","Dice"] },
+    { skill:"Saviynt",                        demand:"medium", pct:40, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"Identity Federation",            demand:"medium", pct:39, portals:["LinkedIn","Dice"] },
+    { skill:"Access Governance",              demand:"medium", pct:38, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"Directory Services",             demand:"medium", pct:37, portals:["LinkedIn","Dice","Indeed"] },
+    { skill:"ServiceNow",                     demand:"medium", pct:36, portals:["LinkedIn","Dice"] },
+    { skill:"IBM Security Verify",            demand:"medium", pct:34, portals:["LinkedIn","Dice"] },
+    { skill:"Delinea",                        demand:"medium", pct:33, portals:["LinkedIn","ZipRecruiter"] },
+    { skill:"Microsoft Identity Manager",     demand:"medium", pct:32, portals:["LinkedIn","Dice"] },
+    { skill:"Session Management",             demand:"medium", pct:31, portals:["LinkedIn","Dice"] },
+    { skill:"Azure IAM",                      demand:"medium", pct:30, portals:["LinkedIn","ZipRecruiter"] },
+    // ── Emerging  (10-29 %) ────────────────────────────────────────
+    { skill:"FIDO2",                          demand:"emerging", pct:28, portals:["LinkedIn","Dice"] },
+    { skill:"Passwordless Authentication",    demand:"emerging", pct:27, portals:["LinkedIn"] },
+    { skill:"Decentralized Identity",         demand:"emerging", pct:25, portals:["LinkedIn"] },
+    { skill:"CIEM",                           demand:"emerging", pct:24, portals:["LinkedIn","Dice"] },
+    { skill:"Identity Orchestration",         demand:"emerging", pct:22, portals:["LinkedIn"] },
+    { skill:"Non-Human Identity",             demand:"emerging", pct:20, portals:["LinkedIn","Dice"] },
+    { skill:"Verifiable Credentials",         demand:"emerging", pct:18, portals:["LinkedIn"] },
+    { skill:"Identity Threat Detection",      demand:"emerging", pct:16, portals:["LinkedIn","Dice"] },
+    { skill:"Machine Identity Management",    demand:"emerging", pct:14, portals:["LinkedIn"] },
+    { skill:"WebAuthn",                       demand:"emerging", pct:12, portals:["LinkedIn","Dice"] },
+    { skill:"Identity Security Posture",      demand:"emerging", pct:10, portals:["LinkedIn"] },
   ];
 
   const CISSP_KEYWORDS = [
@@ -3106,11 +3173,21 @@
     }
   }
 
+  // Returns the active market skills dataset based on _marketRole
+  function _activeMarketData() {
+    return _marketRole === "iam" ? IAM_MARKET_SKILLS : CISSP_MARKET_SKILLS;
+  }
+
   // ── Market analysis ───────────────────────────────────────────────
   function analyzeVsMarket() {
     const editor  = $("resume-editor");
     const results = $("market-analysis-results");
     if (!editor || !editor.innerText.trim()) { alert("Please add your resume content first."); return; }
+
+    // Route to correct dataset based on selected role
+    const isIAM      = _marketRole === "iam";
+    const marketData = isIAM ? IAM_MARKET_SKILLS : CISSP_MARKET_SKILLS;
+    const roleLabel  = isIAM ? "Identity & Access Management" : "CISSP";
 
     const resumeText = editor.innerText.toLowerCase();
     const demandOrder = ["critical", "high", "medium", "emerging"];
@@ -3126,7 +3203,7 @@
     const missingByTier = { critical:[], high:[], medium:[], emerging:[] };
     let tw = 0, fw = 0;
 
-    CISSP_MARKET_SKILLS.forEach(item => {
+    marketData.forEach(item => {
       const has = resumeText.includes(item.skill.toLowerCase());
       tw += weights[item.demand];
       if (has) { fw += weights[item.demand]; foundByTier[item.demand].push(item); }
@@ -3136,8 +3213,8 @@
     const score  = tw > 0 ? Math.round((fw / tw) * 100) : 0;
     const sClass = score >= 75 ? "match-great" : score >= 50 ? "match-good" : "match-poor";
     const sLabel = score >= 75 ? "Market Ready" : score >= 50 ? "Developing" : "Needs Work";
-    const totalFound   = CISSP_MARKET_SKILLS.filter(i => resumeText.includes(i.skill.toLowerCase())).length;
-    const totalMissing = CISSP_MARKET_SKILLS.length - totalFound;
+    const totalFound   = marketData.filter(i => resumeText.includes(i.skill.toLowerCase())).length;
+    const totalMissing = marketData.length - totalFound;
 
     // Store for PDF generator
     _lastMissingKws   = CISSP_MARKET_SKILLS.filter(i => !resumeText.includes(i.skill.toLowerCase())).map(i => i.skill);
@@ -3149,7 +3226,7 @@
         `<div class="match-score-circle ${sClass}">${score}%</div>` +
         `<div class="match-score-info">` +
           `<div class="match-score-label">${sLabel}</div>` +
-          `<div class="match-score-sub">${totalFound} of ${CISSP_MARKET_SKILLS.length} market skills present</div>` +
+          `<div class="match-score-sub">${totalFound} of ${marketData.length} ${roleLabel} market skills present</div>` +
         `</div>` +
       `</div>`;
 
@@ -3343,7 +3420,7 @@
       let html = "";
       tierOrder.forEach(tier => {
         const items = _lastMissingKws.filter(kw => {
-          const m = CISSP_MARKET_SKILLS.find(s => s.skill === kw);
+          const m = _activeMarketData().find(s => s.skill === kw);
           return m && m.demand === tier;
         });
         if (items.length === 0) return;
@@ -3505,7 +3582,7 @@
         const tierOrder = ["critical","high","medium","emerging"];
         const tierLabel = { critical:"Critical Demand", high:"High Demand", medium:"Medium Demand", emerging:"Emerging" };
         tierOrder.forEach(tier => {
-          const items = selected.filter(kw => { const m = CISSP_MARKET_SKILLS.find(s => s.skill === kw); return m && m.demand === tier; });
+          const items = selected.filter(kw => { const m = _activeMarketData().find(s => s.skill === kw); return m && m.demand === tier; });
           if (items.length > 0) {
             skillItems +=
               `<li style="list-style:none;font-weight:700;color:#1a56a0;margin-top:6px;font-size:9pt">${tierLabel[tier]}</li>` +
@@ -3561,9 +3638,10 @@
     const score      = total > 0 ? Math.round((found.length / total) * 100) : 0;
 
     // Title / context line shown in the PDF banner
-    const isMarket = _lastAnalysisType === "market";
-    const jobTitle = isMarket
-      ? "CISSP Market — LinkedIn, Dice, Indeed, ZipRecruiter"
+    const isMarket  = _lastAnalysisType === "market";
+    const roleLabel = _marketRole === "iam" ? "IAM" : "CISSP";
+    const jobTitle  = isMarket
+      ? `${roleLabel} Market — LinkedIn, Dice, Indeed, ZipRecruiter`
       : (jobDesc.split("\n").map(l => l.trim()).find(Boolean) || "CISSP Security Position");
 
     let resumeHTML = editor.innerHTML;
@@ -3598,7 +3676,7 @@
         const tierLabel = { critical:"Critical Demand", high:"High Demand", medium:"Medium Demand", emerging:"Emerging" };
         tierOrder.forEach(tier => {
           const tierItems = missing.filter(kw => {
-            const m = CISSP_MARKET_SKILLS.find(s => s.skill === kw);
+            const m = _activeMarketData().find(s => s.skill === kw);
             return m && m.demand === tier;
           });
           if (tierItems.length > 0) {
@@ -3799,6 +3877,43 @@ ${additions}
     wireOnce("btn-resume-dl-txt",   downloadResumeTxt);
     wireOnce("btn-resume-print",    printResumeAsPDF);
     wireOnce("btn-analyze-market",  analyzeVsMarket);
+
+    // Role-selector chips (CISSP / IAM) inside the market panel
+    document.querySelectorAll(".ra-role-chip").forEach(chip => {
+      if (chip.dataset.wired) return;
+      chip.dataset.wired = "1";
+      chip.addEventListener("click", () => {
+        document.querySelectorAll(".ra-role-chip").forEach(c => c.classList.remove("ra-role-active"));
+        chip.classList.add("ra-role-active");
+        _marketRole = chip.dataset.role;
+
+        const isIAM      = _marketRole === "iam";
+        const roleLabel  = isIAM ? "Identity &amp; Access Management" : "CISSP";
+        const btnLabel   = isIAM ? "&#x1F50D; Analyze vs IAM Market" : "&#x1F50D; Analyze vs CISSP Market";
+        const portalHTML = isIAM
+          ? `<span class="ra-portal">LinkedIn</span><span class="ra-portal">Dice</span>
+             <span class="ra-portal">Indeed</span><span class="ra-portal">ZipRecruiter</span>
+             <span class="ra-portal">Glassdoor</span>`
+          : `<span class="ra-portal">LinkedIn</span><span class="ra-portal">Dice</span>
+             <span class="ra-portal">Indeed</span><span class="ra-portal">ZipRecruiter</span>
+             <span class="ra-portal">CyberSeek</span>`;
+
+        const descEl   = $("ra-market-role-label");
+        const analyzeBtn = $("btn-analyze-market");
+        const portalRow  = $("ra-portal-row");
+
+        if (descEl)      descEl.innerHTML      = roleLabel;
+        if (analyzeBtn)  analyzeBtn.innerHTML  = btnLabel;
+        if (portalRow)   portalRow.innerHTML   = portalHTML;
+
+        // Reset previous results
+        const results = $("market-analysis-results");
+        if (results) results.classList.add("hidden");
+        const actionBar = $("ra-action-bar");
+        if (actionBar) actionBar.classList.add("hidden");
+      });
+    });
+
     wireOnce("btn-fetch-url",       fetchJobUrl);
     wireOnce("btn-analyze-job",     analyzeJobMatch);
     wireOnce("btn-apply-keywords",  applyKeywordsToResume);

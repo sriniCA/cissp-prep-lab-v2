@@ -486,7 +486,7 @@
           <div class="ra-tabs" role="tablist" aria-label="Analysis mode">
             <button type="button" class="ra-tab ra-tab-active" id="ra-tab-market"
                     role="tab" aria-selected="true" aria-controls="ra-panel-market">
-              &#x1F310; CISSP Market
+              &#x1F310; Job Market
             </button>
             <button type="button" class="ra-tab" id="ra-tab-job"
                     role="tab" aria-selected="false" aria-controls="ra-panel-job">
@@ -494,19 +494,32 @@
             </button>
           </div>
 
-          <!-- ── Tab 1: CISSP Market Analysis ─────────────── -->
+          <!-- ── Tab 1: Job Market Analysis ──────────────── -->
           <div id="ra-panel-market" class="ra-panel" role="tabpanel">
-            <p class="ra-desc">
-              Compares your resume against the most in-demand skills found in
-              <strong>CISSP job postings</strong> across major hiring portals.
+
+            <!-- Role selector -->
+            <div class="ra-role-row" id="ra-role-selector" role="group" aria-label="Job role">
+              <button type="button" class="ra-role-chip ra-role-active" data-role="cissp">
+                &#x1F3DB; CISSP (All Domains)
+              </button>
+              <button type="button" class="ra-role-chip" data-role="iam">
+                &#x1F511; Identity &amp; Access Mgmt
+              </button>
+            </div>
+
+            <p class="ra-desc" id="ra-market-desc">
+              Compares your resume against in-demand skills from
+              <strong id="ra-market-role-label">CISSP</strong> job postings across major portals.
             </p>
-            <div class="ra-portal-row">
+
+            <div class="ra-portal-row" id="ra-portal-row">
               <span class="ra-portal">LinkedIn</span>
               <span class="ra-portal">Dice</span>
               <span class="ra-portal">Indeed</span>
               <span class="ra-portal">ZipRecruiter</span>
               <span class="ra-portal">CyberSeek</span>
             </div>
+
             <button type="button" id="btn-analyze-market" class="ra-analyze-btn">
               &#x1F50D; Analyze vs CISSP Market
             </button>
