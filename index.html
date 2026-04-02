@@ -430,8 +430,8 @@
         <button type="button" id="resume-back" class="secondary">← Back</button>
         <h2 style="margin:0;font-size:1.15rem;font-weight:700">Resume Builder</h2>
         <div class="resume-top-actions">
-          <input type="file" id="resume-file-input" accept=".txt,.text,.md" class="hidden" />
-          <button type="button" id="btn-resume-upload" class="secondary">&#x1F4E4; Upload .txt</button>
+          <input type="file" id="resume-file-input" accept=".txt,.text,.md,.pdf" class="hidden" />
+          <button type="button" id="btn-resume-upload" class="secondary">&#x1F4E4; Upload Resume (PDF / TXT)</button>
           <button type="button" id="btn-resume-save" class="secondary">&#x1F4BE; Save Draft</button>
           <button type="button" id="btn-resume-dl-txt">&#x2B07; Download TXT</button>
           <button type="button" id="btn-resume-print" class="secondary">&#x1F5A8; Save as PDF</button>
@@ -455,8 +455,13 @@
             <button type="button" class="rtb" data-cmd="undo" title="Undo">&#x21B6;</button>
             <button type="button" class="rtb" data-cmd="redo" title="Redo">&#x21B7;</button>
           </div>
+          <!-- PDF parsing progress bar (hidden until a PDF is loading) -->
+          <div id="pdf-parse-status" class="pdf-parse-status hidden">
+            <div class="pdf-parse-bar"><div id="pdf-parse-fill" class="pdf-parse-fill"></div></div>
+            <span id="pdf-parse-msg">Parsing PDF…</span>
+          </div>
           <div id="resume-editor" class="resume-editor" contenteditable="true" spellcheck="true"
-               data-placeholder="Paste or type your resume here, or upload a .txt file above…"></div>
+               data-placeholder="Paste or type your resume here, or upload a PDF / .txt file above…"></div>
           <div class="resume-char-count"><span id="resume-word-count">0 words</span></div>
         </div>
 
@@ -467,6 +472,9 @@
             placeholder="Paste a job description here and click Analyze to see how well your resume matches the required CISSP skills…" rows="8"></textarea>
           <button type="button" id="btn-analyze-job">Analyze Match</button>
           <div id="job-analysis-results" class="job-analysis-results hidden"></div>
+          <button type="button" id="btn-generate-optimized" class="resume-gen-btn hidden">
+            &#x1F680; Generate Optimized Resume PDF
+          </button>
           <div id="add-keywords-panel" class="add-keywords-panel hidden">
             <div class="akp-head">Suggested additions to your resume:</div>
             <div id="akp-list"></div>
@@ -485,6 +493,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="data/firebase-config.js"></script>
+  <!-- PDF.js — for reading uploaded PDF resumes client-side (no SRI so CDN updates don't break load) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
   <script src="data/questions.js"></script>
   <script src="data/concepts.js"></script>
   <script src="app.js"></script>

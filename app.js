@@ -2763,6 +2763,112 @@
 
     // ── Resume view ───────────────────────────────────────────────────
 
+  // ── PDF.js worker (loaded from CDN via index.html) ──────────────
+  (function initPDFWorker() {
+    if (typeof pdfjsLib !== "undefined") {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  })();
+
+  // Safely escape HTML for injection into print windows
+  function _escHTML(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Convert raw PDF text lines into semantic HTML for the resume editor
+  function _linesToEditorHTML(lines) {
+    const SECTION_RE = /^(SUMMARY|PROFESSIONAL SUMMARY|CAREER SUMMARY|EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|EDUCATION|ACADEMIC|SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|CERTIFICATIONS|CERTIFICATES|ACHIEVEMENTS|PROJECTS|PUBLICATIONS|AWARDS|VOLUNTEER|REFERENCES|OBJECTIVE|PROFILE|CONTACT|LANGUAGES|INTERESTS)(\s+\S.*)?$/i;
+    const parts = [];
+    let inList = false;
+
+    lines.forEach((raw, idx) => {
+      const line = raw.trim();
+      if (!line) {
+        if (inList) { parts.push("</ul>"); inList = false; }
+        return;
+      }
+      // First non-empty line treated as name (H1)
+      const isFirstContent = idx === 0 || !lines.slice(0, idx).some(l => l.trim());
+      if (isFirstContent && line.length < 70 && !/[@:]/.test(line)) {
+        parts.push(`<h1>${_escHTML(line)}</h1>`);
+        return;
+      }
+      // Section headers: all-caps or known section names
+      const isAllCaps = line === line.toUpperCase() && line.length > 1 && line.length < 55 && /[A-Z]/.test(line);
+      if (isAllCaps || SECTION_RE.test(line)) {
+        if (inList) { parts.push("</ul>"); inList = false; }
+        parts.push(`<h2>${_escHTML(line)}</h2>`);
+        return;
+      }
+      // Bullet points
+      if (/^[•\-·*–]\s*/.test(line)) {
+        if (!inList) { parts.push("<ul>"); inList = true; }
+        parts.push(`<li>${_escHTML(line.replace(/^[•\-·*–]\s*/, ""))}</li>`);
+        return;
+      }
+      // Contact / meta info (short lines with @, |, phone patterns)
+      if (line.length < 120 && /[@|,]|linkedin|github|\d{3}[-.\s]\d{3}/i.test(line)) {
+        if (inList) { parts.push("</ul>"); inList = false; }
+        parts.push(`<p><em>${_escHTML(line)}</em></p>`);
+        return;
+      }
+      // Default paragraph
+      if (inList) { parts.push("</ul>"); inList = false; }
+      parts.push(`<p>${_escHTML(line)}</p>`);
+    });
+    if (inList) parts.push("</ul>");
+    return parts.join("\n");
+  }
+
+  // Extract text lines from a PDF File using PDF.js
+  async function _extractPDFLines(file, onProgress) {
+    if (typeof pdfjsLib === "undefined") throw new Error("PDF.js not available");
+    const buf  = await file.arrayBuffer();
+    const pdf  = await pdfjsLib.getDocument({ data: buf }).promise;
+    const total = pdf.numPages;
+    const allLines = [];
+
+    for (let p = 1; p <= total; p++) {
+      if (onProgress) onProgress(p, total);
+      const page    = await pdf.getPage(p);
+      const content = await page.getTextContent();
+
+      // Reconstruct text lines by grouping items with the same Y coordinate
+      const yMap = new Map();
+      content.items.forEach(item => {
+        if (!item.str) return;
+        const y = Math.round(item.transform[5]);
+        if (!yMap.has(y)) yMap.set(y, []);
+        yMap.get(y).push({ x: item.transform[4], str: item.str });
+      });
+
+      // Sort rows top-to-bottom (larger Y = higher on page in PDF coord space)
+      [...yMap.keys()]
+        .sort((a, b) => b - a)
+        .forEach(y => {
+          const rowStr = yMap.get(y)
+            .sort((a, b) => a.x - b.x)
+            .map(r => r.str)
+            .join(" ")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+          if (rowStr) allLines.push(rowStr);
+        });
+
+      if (p < total) allLines.push(""); // blank line between pages
+    }
+    return allLines;
+  }
+
+  // ── Keyword tracking (populated by analyzeJobMatch) ──────────────
+  let _lastMissingKws = [];
+  let _lastFoundKws   = [];
+
   const CISSP_KEYWORDS = [
     // D1 — Security & Risk Management
     "Risk Management","Risk Assessment","Risk Mitigation","Risk Register","NIST",
@@ -2900,6 +3006,21 @@
           `<div class="match-kw-list">${missing.map(k => `<span class="mkw mkw-miss">${k}</span>`).join("")}</div>`
         : "");
 
+    // Store for optimised-resume generator
+    _lastMissingKws = missing;
+    _lastFoundKws   = found;
+
+    // Show/hide the generate-optimised button
+    const genBtn = $("btn-generate-optimized");
+    if (genBtn) {
+      if (total > 0) {
+        genBtn.classList.remove("hidden");
+        genBtn.textContent = `🚀 Generate Optimized Resume PDF  (${missing.length} keywords added)`;
+      } else {
+        genBtn.classList.add("hidden");
+      }
+    }
+
     // Suggestions panel
     if (missing.length > 0) {
       akPanel.classList.remove("hidden");
@@ -2925,6 +3046,109 @@
     saveResumeDraft();
     $("add-keywords-panel").classList.add("hidden");
     editor.scrollTop = editor.scrollHeight;
+  }
+
+  function generateOptimizedResumePDF() {
+    const editor  = $("resume-editor");
+    const jobDesc = ($("resume-job-desc") ? $("resume-job-desc").value : "") || "";
+
+    if (!editor || !editor.innerText.trim()) {
+      alert("Please add your resume content first."); return;
+    }
+    if (!jobDesc.trim()) {
+      alert("Please paste a job description and click 'Analyze Match' first."); return;
+    }
+
+    const resumeText = editor.innerText.toLowerCase();
+    const missing    = _lastMissingKws.filter(kw => !resumeText.includes(kw.toLowerCase()));
+    const found      = _lastFoundKws;
+    const total      = found.length + missing.length;
+    const score      = total > 0 ? Math.round((found.length / total) * 100) : 0;
+
+    // Derive job title from first non-empty line of job description
+    const jobTitle = jobDesc.split("\n").map(l => l.trim()).find(Boolean) || "CISSP Security Position";
+
+    let resumeHTML = editor.innerHTML;
+
+    // ── Smart additions ─────────────────────────────────────────────
+    let additions = "";
+
+    // 1. Professional Summary — inject if not present
+    if (!resumeText.match(/\b(summary|profile|objective|about me)\b/i) && missing.length > 0) {
+      const summaryKws = missing.slice(0, 5).join(", ");
+      additions +=
+        `<h2>Professional Summary</h2>` +
+        `<p>Results-driven cybersecurity professional with expertise in ${summaryKws}. ` +
+        `Demonstrated ability to design and manage security programs aligned with business objectives, ` +
+        `regulatory requirements, and the CISSP Common Body of Knowledge.</p>`;
+    }
+
+    // 2. Core Competencies — add missing keywords in two-column list
+    if (missing.length > 0) {
+      const hasSkills = resumeText.match(/\b(skills|competencies|capabilities|proficiencies)\b/i);
+      const sectionTitle = hasSkills ? "Additional Security Competencies (Job-Matched)" : "Core Security Competencies";
+      additions +=
+        `<h2>${sectionTitle}</h2>` +
+        `<ul class="comp-grid">${missing.map(kw => `<li>${_escHTML(kw)}</li>`).join("")}</ul>`;
+    }
+
+    // ── Print window styling ─────────────────────────────────────────
+    const scoreColor = score >= 75 ? "#1a7a3c" : score >= 50 ? "#b86800" : "#c0392b";
+    const scoreBg    = score >= 75 ? "#e6f9ec" : score >= 50 ? "#fff8e6" : "#fff0f0";
+    const scoreBorder= score >= 75 ? "#a3d9b1" : score >= 50 ? "#f0c060" : "#f0a0a0";
+
+    const w = window.open("", "_blank");
+    if (!w) { alert("Allow pop-ups in your browser to generate the PDF."); return; }
+
+    w.document.write(`<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>Optimized Resume — CISSP Prep Lab</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Georgia','Times New Roman',serif;max-width:820px;margin:0 auto;
+       color:#1a1a1a;font-size:10.5pt;line-height:1.65;padding:36px 44px}
+  h1{font-size:22pt;color:#0f1b35;font-family:'Arial','Helvetica',sans-serif;
+     margin:0 0 4px;letter-spacing:-0.3px}
+  h2{font-size:9.5pt;text-transform:uppercase;letter-spacing:1.8px;
+     color:#1a56a0;border-bottom:1.5px solid #1a56a0;padding-bottom:3px;
+     margin:20px 0 8px;font-family:'Arial','Helvetica',sans-serif;font-weight:700}
+  h3{font-size:10.5pt;font-weight:700;margin:10px 0 2px;color:#222}
+  p{margin:3px 0;color:#333}
+  em{color:#555;font-style:normal}
+  ul{margin:4px 0 4px 18px}
+  li{margin:2px 0;color:#333}
+  ul.comp-grid{columns:2;column-gap:1.5rem;list-style:disc;margin-left:18px}
+  ul.comp-grid li{break-inside:avoid}
+  .opt-banner{background:${scoreBg};border:1px solid ${scoreBorder};border-radius:6px;
+    padding:9px 14px;margin-bottom:20px;font-family:'Arial',sans-serif;font-size:8.5pt;color:#1a56a0}
+  .opt-banner strong{color:#0f3a8a}
+  .score-badge{display:inline-block;background:${scoreBg};color:${scoreColor};
+    border:1px solid ${scoreBorder};padding:1px 10px;border-radius:20px;
+    font-weight:700;font-size:9pt;margin-left:6px}
+  .footer-note{margin-top:28px;font-size:7.5pt;color:#aaa;
+    font-family:'Arial',sans-serif;border-top:1px solid #eee;padding-top:8px}
+  @media print{
+    .opt-banner,.footer-note{display:none}
+    body{padding:0;margin:0 auto}
+    @page{margin:1.8cm;size:letter}
+  }
+</style>
+</head>
+<body>
+<div class="opt-banner">
+  <strong>🚀 CISSP Prep Lab — Optimized Resume</strong>
+  <span class="score-badge">${score}% match</span>
+  &nbsp;·&nbsp; Tailored for: <em>${_escHTML(jobTitle.slice(0, 80))}</em>
+  &nbsp;·&nbsp; ${missing.length} missing keyword${missing.length !== 1 ? "s" : ""} added
+  &nbsp;·&nbsp; <em>Use Ctrl+P / Cmd+P to save as PDF</em>
+</div>
+${resumeHTML}
+${additions}
+<p class="footer-note">Generated by CISSP Prep Lab · Resume Optimizer · ${new Date().toLocaleDateString()}</p>
+</body></html>`);
+    w.document.close();
+    w.setTimeout(() => w.print(), 600);
   }
 
   function renderResumeView() {
@@ -2956,27 +3180,68 @@
       });
     });
 
-    // Upload
+    // Upload — supports both PDF and plain-text files
     const uploadInput = $("resume-file-input");
     const uploadBtn   = $("btn-resume-upload");
     if (uploadBtn && !uploadBtn.dataset.wired) {
       uploadBtn.dataset.wired = "1";
       uploadBtn.addEventListener("click", () => uploadInput.click());
-      uploadInput.addEventListener("change", e => {
+
+      uploadInput.addEventListener("change", async e => {
         const file = e.target.files[0];
-        if (!file) return;
-        if (!file.name.match(/\.(txt|text|md)$/i)) {
-          alert("Please upload a .txt, .text, or .md file.\n\nFor PDF or Word documents: open the file, select all (Ctrl+A), copy, then paste into the editor.");
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = ev => {
-          editor.innerText = ev.target.result;
-          updateWordCount();
-          saveResumeDraft();
-        };
-        reader.readAsText(file);
         uploadInput.value = "";
+        if (!file) return;
+
+        if (file.name.match(/\.pdf$/i)) {
+          // ── PDF path ───────────────────────────────────────────────
+          const statusEl = $("pdf-parse-status");
+          const fillEl   = $("pdf-parse-fill");
+          const msgEl    = $("pdf-parse-msg");
+
+          if (statusEl) { statusEl.classList.remove("hidden"); }
+          if (msgEl)    { msgEl.textContent = "Reading PDF…"; }
+          if (fillEl)   { fillEl.style.width = "0%"; }
+
+          if (typeof pdfjsLib === "undefined") {
+            if (msgEl) msgEl.textContent = "⚠ PDF.js library failed to load. Please refresh the page and try again.";
+            return;
+          }
+
+          try {
+            const lines = await _extractPDFLines(file, (p, total) => {
+              const pct = Math.round((p / total) * 100);
+              if (fillEl) fillEl.style.width = pct + "%";
+              if (msgEl)  msgEl.textContent  = `Parsing page ${p} of ${total}…`;
+            });
+
+            editor.innerHTML = _linesToEditorHTML(lines);
+            updateWordCount();
+            saveResumeDraft();
+
+            if (msgEl) msgEl.textContent = `✓ PDF loaded — ${lines.filter(Boolean).length} lines extracted`;
+            if (fillEl) fillEl.style.width = "100%";
+            setTimeout(() => {
+              if (statusEl) statusEl.classList.add("hidden");
+            }, 3000);
+          } catch (err) {
+            console.error("PDF parse error:", err);
+            if (msgEl) msgEl.textContent = "⚠ Could not read this PDF. Try copying its text and pasting into the editor.";
+            if (fillEl) fillEl.style.background = "var(--danger, #e74c3c)";
+          }
+
+        } else if (file.name.match(/\.(txt|text|md)$/i)) {
+          // ── Plain-text path ────────────────────────────────────────
+          const reader = new FileReader();
+          reader.onload = ev => {
+            editor.innerText = ev.target.result;
+            updateWordCount();
+            saveResumeDraft();
+          };
+          reader.readAsText(file);
+
+        } else {
+          alert("Please upload a PDF or .txt / .md file.");
+        }
       });
     }
 
@@ -2985,11 +3250,12 @@
       const el = $(id);
       if (el && !el.dataset.wired) { el.dataset.wired = "1"; el.addEventListener("click", fn); }
     };
-    wireOnce("btn-resume-save",    () => { saveResumeDraft(); const b = $("btn-resume-save"); b.textContent = "✓ Saved"; setTimeout(() => { b.textContent = "💾 Save Draft"; }, 1500); });
-    wireOnce("btn-resume-dl-txt",  downloadResumeTxt);
-    wireOnce("btn-resume-print",   printResumeAsPDF);
-    wireOnce("btn-analyze-job",    analyzeJobMatch);
-    wireOnce("btn-apply-keywords", applyKeywordsToResume);
+    wireOnce("btn-resume-save",         () => { saveResumeDraft(); const b = $("btn-resume-save"); b.textContent = "✓ Saved"; setTimeout(() => { b.textContent = "💾 Save Draft"; }, 1500); });
+    wireOnce("btn-resume-dl-txt",       downloadResumeTxt);
+    wireOnce("btn-resume-print",        printResumeAsPDF);
+    wireOnce("btn-analyze-job",         analyzeJobMatch);
+    wireOnce("btn-apply-keywords",      applyKeywordsToResume);
+    wireOnce("btn-generate-optimized",  generateOptimizedResumePDF);
   }
 
   // ── Voice Mode ───────────────────────────────────────────────────
